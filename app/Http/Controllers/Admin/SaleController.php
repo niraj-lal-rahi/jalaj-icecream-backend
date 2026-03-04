@@ -1,0 +1,270 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Item;
+use App\Models\Sale;
+use App\Models\Seller;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+
+class SaleController extends Controller
+{
+    public function index()
+    {
+        $sales = Sale::with(['seller', 'item'])
+            ->latest()
+            ->get()
+            ->groupBy(['date', 'seller_id']);
+
+        return view('admin.sales.index', compact('sales'));
+    }
+
+    public function create()
+    {
+        $today = Carbon::today();
+        $sellerIdsWithSalesToday = Sale::whereDate('date', $today)
+            ->pluck('seller_id')
+            ->unique()
+            ->toArray();
+        $sellers = Seller::whereNotIn('id', $sellerIdsWithSalesToday)
+            ->orderBy('name')
+            ->get();
+        $items = Item::orderBy('order_by')->get();
+
+        return view('admin.sales.create', compact('sellers', 'items'));
+    }
+
+    public function store(Request $request)
+    {
+        $request->validate([
+            'seller_id' => 'required|exists:sellers,id',
+            'date' => 'required|date',
+        ]);
+
+        DB::transaction(function () use ($request) {
+
+            foreach ($request->taken as $item_id => $taken) {
+
+                if ($taken > 0) {
+
+                    Sale::create([
+                        'seller_id' => $request->seller_id,
+                        'item_id' => $item_id,
+                        'pick' => $taken,
+                        'returned' => $request->returned[$item_id] ?? 0,
+                        'custom_price' => $request->price[$item_id] ?? 0,
+                        'remarks' => $request->remarks[$item_id] ?? null,
+                        'red_flag' => $request->red_flag ?? false,
+                        'date' => $request->date,
+                    ]);
+                }
+            }
+        });
+
+        return redirect()
+            ->route('admin.sales.index')
+            ->with('success', 'Sales saved successfully');
+    }
+
+    public function destroy(Sale $sale)
+    {
+        $sale->delete();
+
+        return back()->with('success', 'Sale deleted');
+    }
+
+    public function editGroup($sellerId, $date)
+    {
+        $seller = Seller::findOrFail($sellerId);
+
+        $items = Item::orderBy('order_by')->get();
+
+        $sales = Sale::where('seller_id', $sellerId)
+            ->whereDate('date', $date)
+            ->get()
+            ->keyBy('item_id');
+
+        return view('admin.sales.edit', compact(
+            'seller',
+            'items',
+            'sales',
+            'date'
+        ));
+    }
+
+    public function updateGroup(Request $request, $sellerId, $date)
+    {
+        DB::transaction(function () use ($request, $sellerId, $date) {
+
+            foreach ($request->taken as $itemId => $taken) {
+
+                $returned = $request->returned[$itemId] ?? 0;
+                $price = $request->price[$itemId] ?? 0;
+                $remark = $request->remarks[$itemId] ?? null;
+
+                $existing = Sale::where('seller_id', $sellerId)
+                    ->whereDate('date', $date)
+                    ->where('item_id', $itemId)
+                    ->first();
+
+                // If taken > 0 → update or create
+                if ($taken > 0) {
+
+                    if ($existing) {
+
+                        $existing->update([
+                            'pick' => $taken,
+                            'returned' => $returned,
+                            'custom_price' => $price,
+                            'remarks' => $remark,
+                            'red_flag' => $request->red_flag ?? false,
+                        ]);
+
+                    } else {
+
+                        Sale::create([
+                            'seller_id' => $sellerId,
+                            'item_id' => $itemId,
+                            'pick' => $taken,
+                            'returned' => $returned,
+                            'custom_price' => $price,
+                            'remarks' => $remark,
+                            'red_flag' => $request->red_flag ?? false,
+                            'date' => $date,
+                        ]);
+                    }
+
+                }
+                // If taken = 0 → delete existing row
+                elseif ($existing) {
+                    $existing->delete();
+                }
+            }
+
+        });
+
+        return redirect()
+            ->route('admin.sales.index')
+            ->with('success', 'Sales updated successfully');
+    }
+
+    public function exportYearlySales()
+    {
+        $year = Carbon::now()->year;
+
+        $dates = Sale::whereYear('created_at', $year)
+            ->select('date')
+            ->groupBy('date')
+            ->orderByDesc('date')
+            ->pluck('date');
+
+        $spreadsheet = new Spreadsheet;
+        $spreadsheet->removeSheetByIndex(0); // remove default sheet
+
+        foreach ($dates as $date) {
+
+            $sheet = $spreadsheet->createSheet();
+            $sheet->setTitle($date);
+
+            // Header
+            $headers = [
+                'C1' => 'Seller Name',
+                'D1' => 'Item Name',
+                'F1' => 'Pick',
+                'G1' => 'Returned',
+                'H1' => 'Total',
+                'I1' => 'Sum',
+                'J1' => 'Salary (40%)',
+                'K1' => 'Share (60%)',
+            ];
+
+            foreach ($headers as $cell => $value) {
+                $sheet->setCellValue($cell, $value);
+            }
+
+            $sales = Sale::with(['seller', 'item'])
+                ->whereDate('date', $date)
+                ->get()
+                ->groupBy('seller_id');
+
+            $rowNumber = 2;
+            $overallSum = 0;
+
+            foreach ($sales as $sellerId => $records) {
+
+                $startRow = $rowNumber;
+                $sellerTotal = 0;
+
+                foreach ($records as $sale) {
+
+                    $price = $sale->custom_price > 0
+                        ? $sale->custom_price
+                        : $sale->item->price;
+
+                    $rowTotal = ($sale->pick - $sale->returned) * $price;
+                    $sellerTotal += $rowTotal;
+
+                    $sheet->setCellValue('C'.$rowNumber, $sale->seller->name);
+                    $sheet->setCellValue('D'.$rowNumber, $sale->item->name." ({$price})");
+                    $sheet->setCellValue('F'.$rowNumber, $sale->pick);
+                    $sheet->setCellValue('G'.$rowNumber, $sale->returned);
+                    $sheet->setCellValue('H'.$rowNumber, $rowTotal);
+
+                    // Row Color
+                    $color = $sale->red_flag ? 'FFDF6D6D' : 'FFF5F5DC';
+
+                    $sheet->getStyle("F{$rowNumber}:K{$rowNumber}")
+                        ->getFill()
+                        ->setFillType(Fill::FILL_SOLID)
+                        ->getStartColor()
+                        ->setARGB($color);
+
+                    $rowNumber++;
+                }
+
+                $endRow = $rowNumber - 1;
+
+                // Merge & totals
+                $sheet->mergeCells("C{$startRow}:C{$endRow}");
+                $sheet->mergeCells("I{$startRow}:I{$endRow}");
+                $sheet->mergeCells("J{$startRow}:J{$endRow}");
+                $sheet->mergeCells("K{$startRow}:K{$endRow}");
+
+                $sheet->setCellValue("I{$startRow}", $sellerTotal);
+                $sheet->setCellValue("J{$startRow}", $sellerTotal * 0.4);
+                $sheet->setCellValue("K{$startRow}", $sellerTotal * 0.6);
+
+                $overallSum += $sellerTotal;
+            }
+
+            // Overall total
+            $sheet->setCellValue('C'.($rowNumber + 2), 'Total');
+            $sheet->setCellValue('I'.($rowNumber + 2), $overallSum);
+            $sheet->setCellValue('J'.($rowNumber + 2), $overallSum * 0.4);
+            $sheet->setCellValue('K'.($rowNumber + 2), $overallSum * 0.6);
+
+            // Styling
+            $sheet->getStyle('C1:K1')->getFont()->setBold(true);
+            $sheet->getStyle('C1:K1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet->freezePane('A2');
+
+            foreach (range('A', 'K') as $col) {
+                $sheet->getColumnDimension($col)->setAutoSize(true);
+            }
+        }
+
+        $fileName = 'sales_data_'.now()->format('Y-m-d_H-i-s').'.xlsx';
+
+        return response()->streamDownload(function () use ($spreadsheet) {
+            $writer = new Xlsx($spreadsheet);
+            $writer->save('php://output');
+        }, $fileName);
+    }
+}
