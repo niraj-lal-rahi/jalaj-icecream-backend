@@ -3,59 +3,58 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
-use App\Models\Seller;
+use App\Models\Item;
 use Illuminate\Http\Request;
 
-class SellerController extends Controller
+class ItemController extends Controller
 {
     /**
-     * Display a listing of all sellers.
+     * Display a listing of all items.
      */
     public function index()
     {
         try {
-            $sellers = Seller::with('documents')
-                ->orderBy('name')
-                ->paginate(20);
+            $items = Item::orderBy('order_by')
+                ->paginate(50);
 
             return response()->json([
                 'status' => true,
-                'message' => 'Sellers retrieved successfully',
-                'data' => $sellers->items(),
+                'message' => 'Items retrieved successfully',
+                'data' => $items->items(),
                 'pagination' => [
-                    'total' => $sellers->total(),
-                    'per_page' => $sellers->perPage(),
-                    'current_page' => $sellers->currentPage(),
-                    'last_page' => $sellers->lastPage(),
+                    'total' => $items->total(),
+                    'per_page' => $items->perPage(),
+                    'current_page' => $items->currentPage(),
+                    'last_page' => $items->lastPage(),
                 ],
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Failed to retrieve sellers',
+                'message' => 'Failed to retrieve items',
                 'error' => $e->getMessage(),
             ], 500);
         }
     }
 
     /**
-     * Store a newly created seller.
+     * Store a newly created item.
      */
     public function store(Request $request)
     {
         try {
             $validated = $request->validate([
-                'name' => 'required|string|max:255',
-                'number' => 'required|string|max:20',
-                'address' => 'required|string',
+                'name' => 'required|string|max:250',
+                'price' => 'required|integer|min:0',
+                'order_by' => 'required|integer|min:0',
             ]);
 
-            $seller = Seller::create($validated);
+            $item = Item::create($validated);
 
             return response()->json([
                 'status' => true,
-                'message' => 'Seller created successfully',
-                'data' => $seller->load('documents'),
+                'message' => 'Item created successfully',
+                'data' => $item,
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
@@ -66,64 +65,64 @@ class SellerController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Failed to create seller',
+                'message' => 'Failed to create item',
                 'error' => $e->getMessage(),
             ], 500);
         }
     }
 
     /**
-     * Display the specified seller.
+     * Display the specified item.
      */
     public function show(string $id)
     {
         try {
-            $seller = Seller::with('documents')->findOrFail($id);
+            $item = Item::findOrFail($id);
 
             return response()->json([
                 'status' => true,
-                'message' => 'Seller retrieved successfully',
-                'data' => $seller,
+                'message' => 'Item retrieved successfully',
+                'data' => $item,
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Seller not found',
+                'message' => 'Item not found',
             ], 404);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Failed to retrieve seller',
+                'message' => 'Failed to retrieve item',
                 'error' => $e->getMessage(),
             ], 500);
         }
     }
 
     /**
-     * Update the specified seller.
+     * Update the specified item.
      */
     public function update(Request $request, string $id)
     {
         try {
-            $seller = Seller::findOrFail($id);
+            $item = Item::findOrFail($id);
 
             $validated = $request->validate([
-                'name' => 'sometimes|string|max:255',
-                'number' => 'sometimes|string|max:20',
-                'address' => 'sometimes|string',
+                'name' => 'sometimes|string|max:250',
+                'price' => 'sometimes|integer|min:0',
+                'order_by' => 'sometimes|integer|min:0',
             ]);
 
-            $seller->update($validated);
+            $item->update($validated);
 
             return response()->json([
                 'status' => true,
-                'message' => 'Seller updated successfully',
-                'data' => $seller->load('documents'),
+                'message' => 'Item updated successfully',
+                'data' => $item,
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Seller not found',
+                'message' => 'Item not found',
             ], 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
@@ -134,34 +133,34 @@ class SellerController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Failed to update seller',
+                'message' => 'Failed to update item',
                 'error' => $e->getMessage(),
             ], 500);
         }
     }
 
     /**
-     * Remove the specified seller.
+     * Remove the specified item.
      */
     public function destroy(string $id)
     {
         try {
-            $seller = Seller::findOrFail($id);
-            $seller->delete();
+            $item = Item::findOrFail($id);
+            $item->delete();
 
             return response()->json([
                 'status' => true,
-                'message' => 'Seller deleted successfully',
+                'message' => 'Item deleted successfully',
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Seller not found',
+                'message' => 'Item not found',
             ], 404);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Failed to delete seller',
+                'message' => 'Failed to delete item',
                 'error' => $e->getMessage(),
             ], 500);
         }
