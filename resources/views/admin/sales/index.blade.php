@@ -3,9 +3,23 @@
 @section('content')
     <h3>Sales List</h3>
 
-    <a href="{{ route('admin.sales.create') }}" class="btn btn-success mb-3">
-        Add Sales
-    </a>
+    <div class="mb-3 d-flex gap-2">
+        <a href="{{ route('admin.sales.create') }}" class="btn btn-success">
+            Add Sales
+        </a>
+        <button type="button" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#sendReportModal">
+            <i class="bi bi-send"></i> Send Report via WhatsApp
+        </button>
+    </div>
+
+
+
+    @if (session('error'))
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {{ session('error') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    @endif
 
     <!-- Filter Form -->
     <div class="card mb-4">
@@ -115,4 +129,38 @@
             </div>
         @endforeach
     @endforeach
+
+    <!-- Send Report Modal -->
+    <div class="modal fade" id="sendReportModal" tabindex="-1" aria-labelledby="sendReportModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="sendReportModalLabel">Send Sales Report via WhatsApp</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="POST" action="{{ route('admin.sales.send-report') }}">
+                    @csrf
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="report_date" class="form-label">Select Date</label>
+                            <input type="date" name="date" id="report_date" class="form-control"
+                                value="{{ date('Y-m-d') }}" required>
+                            <small class="text-muted">Choose the date for the sales report</small>
+                        </div>
+                        <div class="alert alert-info" role="alert">
+                            <i class="bi bi-info-circle"></i>
+                            This will send CSV report to admin WhatsApp number:
+                            <strong>{{ config('whatsapp.admin_phone_number') }}</strong>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-send"></i> Send Report
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 @endsection

@@ -295,4 +295,47 @@ class SaleController extends Controller
             $writer->save('php://output');
         }, $fileName);
     }
+
+    /**
+     * Send sales report manually via WhatsApp
+     */
+    public function sendManualReport(Request $request)
+    {
+        try {
+            $request->validate([
+                'date' => 'required|date',
+            ]);
+
+            $date = $request->input('date');
+            $exporter = app('App\Services\SalesReportExporter');
+            $whatsApp = app('App\Services\WhatsAppService');
+
+            // Generate CSV file
+            $filePath = $exporter->exportToFile($date);
+            $fileName = "sales_report_{$date}.csv";
+
+            // Send to admin
+            $adminPhone = config('whatsapp.admin_phone_number');
+            $caption = "📊 Sales Report for {$date}";
+
+            $sent = $whatsApp->sendDocumentMessage(
+                $adminPhone,
+                $filePath,
+                $fileName,
+                $caption
+            );
+
+            if ($sent) {
+                return redirect()->back()->with('success', "✅ Sales report for {$date} sent successfully to WhatsApp!");
+            } else {
+                return redirect()->back()->with('error', 'Failed to send report. Please check logs.');
+            }
+        } catch (\Exception $e) {
+            \Log::error('Manual report sending failed', [
+                'exception' => $e->getMessage(),
+                'date' => $request->input('date'),
+            ]);
+            return redirect()->back()->with('error', 'Error: ' . $e->getMessage());
+        }
+    }
 }

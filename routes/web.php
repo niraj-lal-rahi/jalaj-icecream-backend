@@ -48,10 +48,17 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
         ->middleware('permission:seller.delete')
         ->name('sellers.destroy');
     Route::resource('items', ItemController::class);
+
+    // Custom sales routes (must be defined BEFORE resource)
     Route::get('sales/export', [SaleController::class, 'exportYearlySales'])
         ->name('sales.export');
+    Route::post('sales/send-report', [SaleController::class, 'sendManualReport'])
+        ->name('sales.send-report');
 
+    // Resource routes
     Route::resource('sales', SaleController::class);
+
+    // Group-specific routes
     Route::get('sales/{seller}/{date}/edit',
         [SaleController::class, 'editGroup'])
         ->name('sales.edit.group');
