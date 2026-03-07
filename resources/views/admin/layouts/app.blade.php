@@ -49,6 +49,12 @@
                         Sales Management
                     </a>
                 </li>
+                <li class="nav-item mb-2">
+                    <a href="{{ route('admin.whatsapp.send-message') }}"
+                        class="nav-link text-white {{ request()->routeIs('admin.whatsapp.*') ? 'active bg-primary rounded' : '' }}">
+                        <i class="bi bi-whatsapp"></i> WhatsApp Messages
+                    </a>
+                </li>
                 <li class="nav-item mt-4">
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf

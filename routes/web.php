@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\ItemController;
 use App\Http\Controllers\Admin\SaleController;
 use App\Http\Controllers\Admin\SellerController;
+use App\Http\Controllers\Admin\WhatsAppMessageController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 
@@ -54,6 +55,12 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
         ->name('sales.export');
     Route::post('sales/send-report', [SaleController::class, 'sendManualReport'])
         ->name('sales.send-report');
+
+    // WhatsApp Message Routes
+    Route::get('whatsapp/send-message', [WhatsAppMessageController::class, 'index'])
+        ->name('whatsapp.send-message');
+    Route::post('whatsapp/send-message', [WhatsAppMessageController::class, 'send'])
+        ->name('whatsapp.send');
 
     // Resource routes
     Route::resource('sales', SaleController::class);
