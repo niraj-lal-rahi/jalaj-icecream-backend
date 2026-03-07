@@ -7,6 +7,64 @@
         Add Sales
     </a>
 
+    <!-- Filter Form -->
+    <div class="card mb-4">
+        <div class="card-header bg-light">
+            <strong>Filters</strong>
+        </div>
+        <div class="card-body">
+            <form method="GET" action="{{ route('admin.sales.index') }}" class="row g-3">
+                <!-- Seller Filter -->
+                <div class="col-md-4">
+                    <label for="seller_id" class="form-label">Seller</label>
+                    <select name="seller_id" id="seller_id" class="form-control">
+                        <option value="">-- All Sellers --</option>
+                        @foreach ($sellers as $seller)
+                            <option value="{{ $seller->id }}" {{ request('seller_id') == $seller->id ? 'selected' : '' }}>
+                                {{ $seller->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <!-- Date Filter -->
+                <div class="col-md-4">
+                    <label for="date" class="form-label">Date</label>
+                    <input type="date" name="date" id="date" class="form-control" value="{{ request('date') }}">
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="col-md-4">
+                    <label class="form-label">&nbsp;</label>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-search"></i> Filter
+                        </button>
+                        <a href="{{ route('admin.sales.index') }}" class="btn btn-secondary">
+                            <i class="bi bi-arrow-clockwise"></i> Clear
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Active Filters Display -->
+    @if (request('seller_id') || request('date'))
+        <div class="alert alert-info mb-3">
+            <strong>Active Filters:</strong>
+            @if (request('seller_id'))
+                Seller: <strong>{{ $sellers->find(request('seller_id'))->name }}</strong>
+            @endif
+            @if (request('date'))
+                @if (request('seller_id'))
+                    |
+                @endif
+                Date: <strong>{{ request('date') }}</strong>
+            @endif
+        </div>
+    @endif
+
     @foreach ($sales as $date => $sellerGroup)
         @foreach ($sellerGroup as $sellerId => $rows)
             <div class="card mb-3">

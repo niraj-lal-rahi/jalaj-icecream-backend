@@ -14,18 +14,35 @@ class SaleController extends Controller
 {
     /**
      * Display a listing of all sales.
+     *
+     * Query Parameters:
+     * - seller_id: Filter by seller ID (takes precedence over seller_name)
+     * - seller_name: Filter by seller name using partial match (LIKE)
+     * - date: Filter by exact date (YYYY-MM-DD format)
+     * - date_from & date_to: Filter by date range (both required for range filter)
+     * - limit: Number of items per page (default: 30)
      */
     public function index(Request $request)
     {
         try {
             $query = Sale::with(['seller', 'item']);
 
-            // Optional filters
+            // Filter by seller_id (takes precedence over seller_name)
             if ($request->has('seller_id')) {
                 $query->where('seller_id', $request->seller_id);
+            } elseif ($request->has('seller_name')) {
+                // Filter by seller name using partial match
+                $query->whereHas('seller', function ($q) use ($request) {
+                    $q->where('name', 'like', '%' . $request->seller_name . '%');
+                });
             }
 
-            if ($request->has('date_from') && $request->has('date_to')) {
+            // Filter by exact date
+            if ($request->has('date')) {
+                $query->where('date', $request->date);
+            }
+            // Or filter by date range (if both date_from and date_to provided)
+            elseif ($request->has('date_from') && $request->has('date_to')) {
                 $query->whereBetween('date', [
                     $request->date_from,
                     $request->date_to,

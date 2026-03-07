@@ -16,14 +16,42 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class SaleController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $sales = Sale::with(['seller', 'item'])
-            ->latest()
+        // Build query for sales
+        $query = Sale::with(['seller', 'item']);
+
+        // Filter by seller_id (takes precedence over seller_name)
+        if ($request->has('seller_id') && $request->seller_id !== '') {
+            $query->where('seller_id', $request->seller_id);
+        } elseif ($request->has('seller_name') && $request->seller_name !== '') {
+            // Filter by seller name using partial match
+            $query->whereHas('seller', function ($q) use ($request) {
+                $q->where('name', 'like', '%' . $request->seller_name . '%');
+            });
+        }
+
+        // Filter by exact date
+        if ($request->has('date') && $request->date !== '') {
+            $query->whereDate('date', $request->date);
+        }
+
+        // Get sales and group them
+        $sales = $query->latest()
             ->get()
             ->groupBy(['date', 'seller_id']);
 
-        return view('admin.sales.index', compact('sales'));
+        // Get all sellers for filter dropdown
+        $sellers = Seller::orderBy('name')->get();
+
+        // Get current filter values for display
+        $filters = [
+            'seller_id' => $request->get('seller_id'),
+            'seller_name' => $request->get('seller_name'),
+            'date' => $request->get('date'),
+        ];
+
+        return view('admin.sales.index', compact('sales', 'sellers', 'filters'));
     }
 
     public function create()
