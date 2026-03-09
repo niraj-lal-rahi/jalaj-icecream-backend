@@ -161,4 +161,85 @@ class DashboardController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get seller performance metrics with ranking
+     */
+    public function getSellerPerformance()
+    {
+        try {
+            // Get all unique dates in the system
+            $allDates = Sale::distinct('date')->pluck('date')->toArray();
+            $totalDaysInSystem = count($allDates);
+
+            // Get all sellers with their sales data
+            $sellers = Seller::all();
+            
+            $sellerPerformance = $sellers->map(function ($seller) use ($allDates, $totalDaysInSystem) {
+                // Get all sales for this seller
+                $sellerSales = Sale::where('seller_id', $seller->id)->get();
+                
+                // Calculate total sales amount
+                $totalSalesAmount = $sellerSales->sum(function ($sale) {
+                    $price = $sale->custom_price ?: $sale->item->price;
+                    return ($sale->pick - $sale->returned) * $price;
+                });
+                
+                // Get unique dates this seller has sales
+                $daysWithSales = $sellerSales->pluck('date')->unique()->count();
+                
+                // Calculate shares
+                $ownerShare = $totalSalesAmount * 0.6;
+                $sellerShare = $totalSalesAmount * 0.4;
+                
+                // Get dates without sales (absent days)
+                $sellerDates = $sellerSales->pluck('date')->unique()->toArray();
+                $absentDays = array_diff($allDates, $sellerDates);
+                
+                // Calculate performance score
+                // Volume Score: normalized against max sales
+                $maxSalesAmount = Sale::all()->sum(function ($sale) {
+                    $price = $sale->custom_price ?: $sale->item->price;
+                    return ($sale->pick - $sale->returned) * $price;
+                });
+                $volumeScore = $maxSalesAmount > 0 ? ($totalSalesAmount / $maxSalesAmount) * 100 : 0;
+                
+                // Consistency Score: days active vs total days
+                $consistencyScore = $totalDaysInSystem > 0 ? ($daysWithSales / $totalDaysInSystem) * 100 : 0;
+                
+                // Final Performance Score (50% volume, 50% consistency)
+                $performanceScore = ($volumeScore * 0.5) + ($consistencyScore * 0.5);
+                
+                return [
+                    'id' => $seller->id,
+                    'name' => $seller->name,
+                    'number' => $seller->number,
+                    'totalSalesAmount' => $totalSalesAmount,
+                    'ownerShare' => $ownerShare,
+                    'sellerShare' => $sellerShare,
+                    'daysWithSales' => $daysWithSales,
+                    'absentDays' => count($absentDays),
+                    'totalDays' => $totalDaysInSystem,
+                    'presentDates' => $sellerDates,
+                    'absentDates' => array_values($absentDays),
+                    'volumeScore' => round($volumeScore, 2),
+                    'consistencyScore' => round($consistencyScore, 2),
+                    'performanceScore' => round($performanceScore, 2),
+                ];
+            })->sortByDesc('performanceScore')->values();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Seller performance data retrieved successfully',
+                'data' => $sellerPerformance,
+                'count' => $sellerPerformance->count(),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to retrieve seller performance',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

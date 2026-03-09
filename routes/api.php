@@ -14,6 +14,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index']);
     Route::get('/dashboard/red-flags', [DashboardController::class, 'getRedFlagSales']);
     Route::get('/dashboard/entry-days', [DashboardController::class, 'getEntryDays']);
+    Route::get('/dashboard/seller-performance', [DashboardController::class, 'getSellerPerformance']);
 
     Route::apiResource('sellers', SellerController::class);
     Route::apiResource('items', ItemController::class);
