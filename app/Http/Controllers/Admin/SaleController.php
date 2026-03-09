@@ -21,10 +21,13 @@ class SaleController extends Controller
         // Build query for sales
         $query = Sale::with(['seller', 'item']);
 
+        // Check if any filters are being applied
+        $hasAnyFilter = $request->filled('seller_id') || $request->filled('seller_name') || $request->filled('date');
+
         // Filter by seller_id (takes precedence over seller_name)
-        if ($request->has('seller_id') && $request->seller_id !== '') {
+        if ($request->filled('seller_id')) {
             $query->where('seller_id', $request->seller_id);
-        } elseif ($request->has('seller_name') && $request->seller_name !== '') {
+        } elseif ($request->filled('seller_name')) {
             // Filter by seller name using partial match
             $query->whereHas('seller', function ($q) use ($request) {
                 $q->where('name', 'like', '%' . $request->seller_name . '%');
@@ -32,8 +35,11 @@ class SaleController extends Controller
         }
 
         // Filter by exact date
-        if ($request->has('date') && $request->date !== '') {
+        if ($request->filled('date')) {
             $query->whereDate('date', $request->date);
+        } elseif (!$hasAnyFilter) {
+            // Default to current date if NO filters are applied
+            $query->whereDate('date', Carbon::today());
         }
 
         // Get sales and group them

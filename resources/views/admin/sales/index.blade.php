@@ -24,7 +24,7 @@
     <!-- Filter Form -->
     <div class="card mb-4">
         <div class="card-header bg-light">
-            <strong>Filters</strong>
+            <strong>Filters (Optional - Default shows today's sales)</strong>
         </div>
         <div class="card-body">
             <form method="GET" action="{{ route('admin.sales.index') }}" class="row g-3">
@@ -64,7 +64,7 @@
     </div>
 
     <!-- Active Filters Display -->
-    @if (request('seller_id') || request('date'))
+    @if (request('seller_id') || request('date') || request('seller_name'))
         <div class="alert alert-info mb-3">
             <strong>Active Filters:</strong>
             @if (request('seller_id'))
@@ -76,6 +76,53 @@
                 @endif
                 Date: <strong>{{ request('date') }}</strong>
             @endif
+        </div>
+    @else
+        <div class="alert alert-success mb-3">
+            <strong>Showing:</strong> Today's Sales ({{ date('Y-m-d') }})
+            <br><small>Use filters above to view other dates or sellers</small>
+        </div>
+    @endif
+
+    <!-- Overall Summary -->
+    @php
+        $overallTotal = 0;
+        $sellerCount = 0;
+        foreach ($sales as $date => $sellerGroup) {
+            $sellerCount += count($sellerGroup);
+            foreach ($sellerGroup as $sellerId => $rows) {
+                foreach ($rows as $sale) {
+                    $overallTotal += $sale->total;
+                }
+            }
+        }
+    @endphp
+
+    @if ($overallTotal > 0)
+        <div class="card mb-4 border-success">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">Overall Summary</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <h6>Number of Sellers</h6>
+                        <h4 class="text-warning">{{ $sellerCount }}</h4>
+                    </div>
+                    <div class="col-md-3">
+                        <h6>Total Amount</h6>
+                        <h4 class="text-primary">₹ {{ number_format($overallTotal, 2) }}</h4>
+                    </div>
+                    <div class="col-md-3">
+                        <h6>Seller Share (40%)</h6>
+                        <h4 class="text-info">₹ {{ number_format($overallTotal * 0.4, 2) }}</h4>
+                    </div>
+                    <div class="col-md-3">
+                        <h6>Owner Share (60%)</h6>
+                        <h4 class="text-success">₹ {{ number_format($overallTotal * 0.6, 2) }}</h4>
+                    </div>
+                </div>
+            </div>
         </div>
     @endif
 
@@ -124,7 +171,8 @@
                     </table>
 
                     <strong>Total: ₹ {{ $grand }}</strong><br>
-                    <strong>Seller Share (60%): ₹ {{ $grand * 0.6 }}</strong>
+                    <strong>Seller Share (40%): ₹ {{ round($grand * 0.4, 2) }}</strong><br>
+                    <strong>Owner Share (60%): ₹ {{ round($grand * 0.6, 2) }}</strong>
                 </div>
             </div>
         @endforeach
