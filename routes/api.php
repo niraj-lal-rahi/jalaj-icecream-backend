@@ -12,6 +12,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'getProfile']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/dashboard', [DashboardController::class, 'index']);
+    Route::get('/dashboard/red-flags', [DashboardController::class, 'getRedFlagSales']);
 
     Route::apiResource('sellers', SellerController::class);
     Route::apiResource('items', ItemController::class);

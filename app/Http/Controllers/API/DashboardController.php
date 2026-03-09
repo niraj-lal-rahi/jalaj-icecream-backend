@@ -44,7 +44,15 @@ class DashboardController extends Controller
             // Counts
             $sellerCount = Seller::count();
             $itemCount = Item::count();
-            $transactionCount = Sale::count();
+            // Count unique transactions: 1 transaction = 1 seller per date (unique date + seller_id combination)
+            $transactionCount = Sale::selectRaw('DISTINCT date, seller_id')->count('seller_id');
+
+            // Count unique days with sales (distinct dates only)
+            $daysWithSales = Sale::distinct('date')->count('date');
+
+            // Calculate earnings
+            $ownerEarning = $grandTotal * 0.6;  // 60% to owner
+            $sellerEarning = $grandTotal * 0.4;  // 40% to sellers
 
             return response()->json([
                 'status' => true,
@@ -53,16 +61,67 @@ class DashboardController extends Controller
                     'todayTotal' => $todayTotal,
                     'monthlyTotal' => $monthlyTotal,
                     'grandTotal' => $grandTotal,
+                    'ownerEarning' => $ownerEarning,
+                    'sellerEarning' => $sellerEarning,
                     'redFlagCount' => $redFlagCount,
                     'sellerCount' => $sellerCount,
                     'itemCount' => $itemCount,
                     'transactionCount' => $transactionCount,
+                    'daysWithSales' => $daysWithSales,
                 ],
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
                 'message' => 'Failed to retrieve dashboard data',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all red flag sales with seller and item details
+     */
+    public function getRedFlagSales()
+    {
+        try {
+            $redFlagSales = Sale::with(['seller', 'item'])
+                ->where('red_flag', true)
+                ->orderByDesc('date')
+                ->get()
+                ->map(function ($sale) {
+                    return [
+                        'id' => $sale->id,
+                        'date' => $sale->date,
+                        'seller' => [
+                            'id' => $sale->seller->id,
+                            'name' => $sale->seller->name,
+                            'number' => $sale->seller->number,
+                        ],
+                        'item' => [
+                            'id' => $sale->item->id,
+                            'name' => $sale->item->name,
+                        ],
+                        'pick' => $sale->pick,
+                        'returned' => $sale->returned,
+                        'netQty' => $sale->pick - $sale->returned,
+                        'customPrice' => $sale->custom_price,
+                        'itemPrice' => $sale->item->price,
+                        'total' => $sale->total,
+                        'remarks' => $sale->remarks,
+                    ];
+                });
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Red flag sales retrieved successfully',
+                'data' => $redFlagSales,
+                'count' => $redFlagSales->count(),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to retrieve red flag sales',
                 'error' => $e->getMessage(),
             ], 500);
         }
