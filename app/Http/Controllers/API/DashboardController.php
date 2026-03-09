@@ -38,8 +38,11 @@ class DashboardController extends Controller
                 return ($sale->pick - $sale->returned) * $price;
             });
 
-            // Red Flag Count
-            $redFlagCount = Sale::where('red_flag', true)->count();
+            // Red Flag Count - unique combinations of date and seller_id (count 1 per seller per date)
+            $redFlagCount = Sale::where('red_flag', true)
+                ->get()
+                ->groupBy(['date', 'seller_id'])
+                ->count();
 
             // Counts
             $sellerCount = Seller::count();
@@ -122,6 +125,38 @@ class DashboardController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => 'Failed to retrieve red flag sales',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all entry days (dates with sales) with count of unique sellers per date
+     */
+    public function getEntryDays()
+    {
+        try {
+            $entryDays = Sale::selectRaw('date, COUNT(DISTINCT seller_id) as seller_count')
+                ->groupBy('date')
+                ->orderByDesc('date')
+                ->get()
+                ->map(function ($day) {
+                    return [
+                        'date' => $day->date,
+                        'sellerCount' => $day->seller_count,
+                    ];
+                });
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Entry days retrieved successfully',
+                'data' => $entryDays,
+                'count' => $entryDays->count(),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to retrieve entry days',
                 'error' => $e->getMessage(),
             ], 500);
         }
