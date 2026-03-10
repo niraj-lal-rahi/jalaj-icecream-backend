@@ -55,6 +55,12 @@
                         <i class="bi bi-whatsapp"></i> WhatsApp Messages
                     </a>
                 </li>
+                <li class="nav-item mb-2">
+                    <a href="{{ route('admin.database-dumps.index') }}"
+                        class="nav-link text-white {{ request()->routeIs('admin.database-dumps.*') ? 'active bg-primary rounded' : '' }}">
+                        💾 Database Dumps
+                    </a>
+                </li>
                 <li class="nav-item mt-4">
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf
