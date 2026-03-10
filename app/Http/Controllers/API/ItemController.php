@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Log;
 use App\Http\Traits\ApiResponse;
 use App\Models\Item;
-use Illuminate\Http\Request;
+use App\Exceptions\ItemNotFoundException;
+use App\Http\Requests\CreateItemRequest;
+use App\Http\Requests\UpdateItemRequest;
 
 class ItemController extends Controller
 {
@@ -38,27 +40,17 @@ class ItemController extends Controller
 
     /**
      * Store a newly created item.
+     *
+     * @param CreateItemRequest $request Validated item data
+     * @return \Illuminate\Http\JsonResponse Created item or error response
      */
-    public function store(Request $request)
+    public function store(CreateItemRequest $request)
     {
         try {
-            $validated = $request->validate([
-                'name' => 'required|string|max:250',
-                'price' => 'required|integer|min:0',
-                'order_by' => 'required|integer|min:0',
-            ]);
-
+            $validated = $request->validated();
             $item = Item::create($validated);
 
             return $this->success($item, 'Item created successfully', 201);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::warning('Validation Error: ItemController::store', [
-                'method' => 'store',
-                'errors' => $e->errors(),
-            ]);
-            return $this->error('Validation failed', 422, null, [
-                'errors' => $e->errors(),
-            ]);
         } catch (\Exception $e) {
             Log::error('API Error: ItemController::store', [
                 'method' => 'store',
@@ -71,23 +63,32 @@ class ItemController extends Controller
 
     /**
      * Display the specified item.
+     *
+     * @param string $id Item ID
+     * @return \Illuminate\Http\JsonResponse Item data or error response
+     * @throws ItemNotFoundException
      */
     public function show(string $id)
     {
         try {
-            $item = Item::findOrFail($id);
+            $item = Item::find($id);
+
+            if (!$item) {
+                throw new ItemNotFoundException((int) $id);
+            }
 
             return $this->success($item, 'Item retrieved successfully');
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            Log::warning('Not Found: ItemController::show', [
+        } catch (ItemNotFoundException $e) {
+            Log::warning('Item not found: ItemController::show', [
                 'method' => 'show',
-                'id' => $id,
+                'item_id' => $id,
+                'message' => $e->getMessage(),
             ]);
-            return $this->error('Item not found', 404);
+            return $this->error($e->getMessage(), 404);
         } catch (\Exception $e) {
             Log::error('API Error: ItemController::show', [
                 'method' => 'show',
-                'id' => $id,
+                'item_id' => $id,
                 'error' => $e->getMessage(),
                 'exception' => get_class($e),
             ]);
@@ -97,40 +98,36 @@ class ItemController extends Controller
 
     /**
      * Update the specified item.
+     *
+     * @param UpdateItemRequest $request Validated item data
+     * @param string $id Item ID to update
+     * @return \Illuminate\Http\JsonResponse Updated item or error response
+     * @throws ItemNotFoundException
      */
-    public function update(Request $request, string $id)
+    public function update(UpdateItemRequest $request, string $id)
     {
         try {
-            $item = Item::findOrFail($id);
+            $item = Item::find($id);
 
-            $validated = $request->validate([
-                'name' => 'sometimes|string|max:250',
-                'price' => 'sometimes|integer|min:0',
-                'order_by' => 'sometimes|integer|min:0',
-            ]);
+            if (!$item) {
+                throw new ItemNotFoundException((int) $id);
+            }
 
+            $validated = $request->validated();
             $item->update($validated);
 
             return $this->success($item, 'Item updated successfully');
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            Log::warning('Not Found: ItemController::update', [
+        } catch (ItemNotFoundException $e) {
+            Log::warning('Item not found: ItemController::update', [
                 'method' => 'update',
-                'id' => $id,
+                'item_id' => $id,
+                'message' => $e->getMessage(),
             ]);
-            return $this->error('Item not found', 404);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::warning('Validation Error: ItemController::update', [
-                'method' => 'update',
-                'id' => $id,
-                'errors' => $e->errors(),
-            ]);
-            return $this->error('Validation failed', 422, null, [
-                'errors' => $e->errors(),
-            ]);
+            return $this->error($e->getMessage(), 404);
         } catch (\Exception $e) {
             Log::error('API Error: ItemController::update', [
                 'method' => 'update',
-                'id' => $id,
+                'item_id' => $id,
                 'error' => $e->getMessage(),
                 'exception' => get_class($e),
             ]);
@@ -140,24 +137,34 @@ class ItemController extends Controller
 
     /**
      * Remove the specified item.
+     *
+     * @param string $id Item ID to delete
+     * @return \Illuminate\Http\JsonResponse Success or error response
+     * @throws ItemNotFoundException
      */
     public function destroy(string $id)
     {
         try {
-            $item = Item::findOrFail($id);
+            $item = Item::find($id);
+
+            if (!$item) {
+                throw new ItemNotFoundException((int) $id);
+            }
+
             $item->delete();
 
             return $this->success(null, 'Item deleted successfully');
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            Log::warning('Not Found: ItemController::destroy', [
+        } catch (ItemNotFoundException $e) {
+            Log::warning('Item not found: ItemController::destroy', [
                 'method' => 'destroy',
-                'id' => $id,
+                'item_id' => $id,
+                'message' => $e->getMessage(),
             ]);
-            return $this->error('Item not found', 404);
+            return $this->error($e->getMessage(), 404);
         } catch (\Exception $e) {
             Log::error('API Error: ItemController::destroy', [
                 'method' => 'destroy',
-                'id' => $id,
+                'item_id' => $id,
                 'error' => $e->getMessage(),
                 'exception' => get_class($e),
             ]);

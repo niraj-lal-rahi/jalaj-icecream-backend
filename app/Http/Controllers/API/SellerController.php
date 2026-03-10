@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Log;
 use App\Http\Traits\ApiResponse;
 use App\Models\Seller;
+use App\Exceptions\SellerNotFoundException;
+use App\Http\Requests\CreateSellerRequest;
+use App\Http\Requests\UpdateSellerRequest;
 use Illuminate\Http\Request;
 
 class SellerController extends Controller
@@ -39,27 +42,18 @@ class SellerController extends Controller
 
     /**
      * Store a newly created seller.
+     *
+     * @param CreateSellerRequest $request Validated seller data
+     * @return \Illuminate\Http\JsonResponse Created seller or error response
      */
-    public function store(Request $request)
+    public function store(CreateSellerRequest $request)
     {
         try {
-            $validated = $request->validate([
-                'name' => 'required|string|max:255',
-                'number' => 'required|string|max:20',
-                'address' => 'required|string',
-            ]);
+            $validated = $request->validated();
 
             $seller = Seller::create($validated);
 
             return $this->success($seller->load('documents'), 'Seller created successfully', 201);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::warning('Validation Error: SellerController::store', [
-                'method' => 'store',
-                'errors' => $e->errors(),
-            ]);
-            return $this->error('Validation failed', 422, null, [
-                'errors' => $e->errors(),
-            ]);
         } catch (\Exception $e) {
             Log::error('API Error: SellerController::store', [
                 'method' => 'store',
@@ -72,23 +66,32 @@ class SellerController extends Controller
 
     /**
      * Display the specified seller.
+     *
+     * @param string $id Seller ID
+     * @return \Illuminate\Http\JsonResponse Seller data or error response
+     * @throws SellerNotFoundException
      */
     public function show(string $id)
     {
         try {
-            $seller = Seller::with('documents')->findOrFail($id);
+            $seller = Seller::with('documents')->find($id);
+
+            if (!$seller) {
+                throw new SellerNotFoundException((int) $id);
+            }
 
             return $this->success($seller, 'Seller retrieved successfully');
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            Log::warning('Not Found: SellerController::show', [
+        } catch (SellerNotFoundException $e) {
+            Log::warning('Seller not found: SellerController::show', [
                 'method' => 'show',
-                'id' => $id,
+                'seller_id' => $id,
+                'message' => $e->getMessage(),
             ]);
-            return $this->error('Seller not found', 404);
+            return $this->error($e->getMessage(), 404);
         } catch (\Exception $e) {
             Log::error('API Error: SellerController::show', [
                 'method' => 'show',
-                'id' => $id,
+                'seller_id' => $id,
                 'error' => $e->getMessage(),
                 'exception' => get_class($e),
             ]);
@@ -98,40 +101,37 @@ class SellerController extends Controller
 
     /**
      * Update the specified seller.
+     *
+     * @param UpdateSellerRequest $request Validated seller data
+     * @param string $id Seller ID to update
+     * @return \Illuminate\Http\JsonResponse Updated seller or error response
+     * @throws SellerNotFoundException
      */
-    public function update(Request $request, string $id)
+    public function update(UpdateSellerRequest $request, string $id)
     {
         try {
-            $seller = Seller::findOrFail($id);
+            $seller = Seller::find($id);
 
-            $validated = $request->validate([
-                'name' => 'sometimes|string|max:255',
-                'number' => 'sometimes|string|max:20',
-                'address' => 'sometimes|string',
-            ]);
+            if (!$seller) {
+                throw new SellerNotFoundException((int) $id);
+            }
+
+            $validated = $request->validated();
 
             $seller->update($validated);
 
             return $this->success($seller->load('documents'), 'Seller updated successfully');
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            Log::warning('Not Found: SellerController::update', [
+        } catch (SellerNotFoundException $e) {
+            Log::warning('Seller not found: SellerController::update', [
                 'method' => 'update',
-                'id' => $id,
+                'seller_id' => $id,
+                'message' => $e->getMessage(),
             ]);
-            return $this->error('Seller not found', 404);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::warning('Validation Error: SellerController::update', [
-                'method' => 'update',
-                'id' => $id,
-                'errors' => $e->errors(),
-            ]);
-            return $this->error('Validation failed', 422, null, [
-                'errors' => $e->errors(),
-            ]);
+            return $this->error($e->getMessage(), 404);
         } catch (\Exception $e) {
             Log::error('API Error: SellerController::update', [
                 'method' => 'update',
-                'id' => $id,
+                'seller_id' => $id,
                 'error' => $e->getMessage(),
                 'exception' => get_class($e),
             ]);
@@ -141,24 +141,34 @@ class SellerController extends Controller
 
     /**
      * Remove the specified seller.
+     *
+     * @param string $id Seller ID to delete
+     * @return \Illuminate\Http\JsonResponse Success or error response
+     * @throws SellerNotFoundException
      */
     public function destroy(string $id)
     {
         try {
-            $seller = Seller::findOrFail($id);
+            $seller = Seller::find($id);
+
+            if (!$seller) {
+                throw new SellerNotFoundException((int) $id);
+            }
+
             $seller->delete();
 
             return $this->success(null, 'Seller deleted successfully');
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            Log::warning('Not Found: SellerController::destroy', [
+        } catch (SellerNotFoundException $e) {
+            Log::warning('Seller not found: SellerController::destroy', [
                 'method' => 'destroy',
-                'id' => $id,
+                'seller_id' => $id,
+                'message' => $e->getMessage(),
             ]);
-            return $this->error('Seller not found', 404);
+            return $this->error($e->getMessage(), 404);
         } catch (\Exception $e) {
             Log::error('API Error: SellerController::destroy', [
                 'method' => 'destroy',
-                'id' => $id,
+                'seller_id' => $id,
                 'error' => $e->getMessage(),
                 'exception' => get_class($e),
             ]);

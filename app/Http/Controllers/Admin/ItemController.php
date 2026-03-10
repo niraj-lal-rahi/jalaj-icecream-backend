@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Item;
 use Illuminate\Http\Request;
+use App\Http\Requests\CreateItemRequest;
+use App\Http\Requests\UpdateItemRequest;
 
 class ItemController extends Controller
 {
@@ -20,15 +22,11 @@ class ItemController extends Controller
         return view('admin.items.create');
     }
 
-    public function store(Request $request)
+    public function store(CreateItemRequest $request)
     {
-        $request->validate([
-            'name' => 'required|string|max:250',
-            'price' => 'required|integer|min:0',
-            'order_by' => 'required|integer|min:0',
-        ]);
+        $validated = $request->validated();
 
-        Item::create($request->all());
+        Item::create($validated);
 
         return redirect()->route('admin.items.index')
             ->with('success', 'Item created successfully');
@@ -39,15 +37,11 @@ class ItemController extends Controller
         return view('admin.items.edit', compact('item'));
     }
 
-    public function update(Request $request, Item $item)
+    public function update(UpdateItemRequest $request, Item $item)
     {
-        $request->validate([
-            'name' => 'required|string|max:250',
-            'price' => 'required|integer|min:0',
-            'order_by' => 'required|integer|min:0',
-        ]);
+        $validated = $request->validated();
 
-        $item->update($request->all());
+        $item->update($validated);
 
         return redirect()->route('admin.items.index')
             ->with('success', 'Item updated successfully');

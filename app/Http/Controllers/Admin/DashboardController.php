@@ -6,10 +6,32 @@ use App\Http\Controllers\Controller;
 use App\Models\Sale;
 use App\Models\Seller;
 use App\Models\Item;
+use App\Services\SellerPerformanceService;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 class DashboardController extends Controller
 {
+    // === Constants (UPPER_SNAKE_CASE) ===
+    // Profit distribution percentages (must sum to 1.0)
+    private const OWNER_SHARE_PERCENTAGE = 0.6;  // 60% to owner
+    private const SELLER_SHARE_PERCENTAGE = 0.4; // 40% to sellers
+
+    // Top performers display limit
+    private const TOP_PERFORMERS_LIMIT = 3;
+
+    /**
+     * Display admin dashboard with sales metrics and top performers
+     *
+     * Shows:
+     * - Today's, yesterday's, monthly, and all-time sales totals
+     * - Owner and seller earnings breakdown
+     * - Red flag transaction count
+     * - Seller and item counts
+     * - Top N performers by performance score
+     *
+     * @return \Illuminate\View\View Dashboard view with compact data
+     */
     public function index()
     {
         try {
@@ -47,14 +69,14 @@ class DashboardController extends Controller
             });
 
             // Calculate earnings
-            $ownerEarning = $grandTotal * 0.6;  // 60% to owner
-            $sellerEarning = $grandTotal * 0.4;  // 40% to sellers
-            $todayOwnerShare = $todayTotal * 0.6;
-            $todaySellerShare = $todayTotal * 0.4;
-            $yesterdayOwnerShare = $yesterdayTotal * 0.6;
-            $yesterdaySellerShare = $yesterdayTotal * 0.4;
-            $monthlyOwnerShare = $monthlyTotal * 0.6;
-            $monthlySellerShare = $monthlyTotal * 0.4;
+            $ownerEarning = $grandTotal * self::OWNER_SHARE_PERCENTAGE;
+            $sellerEarning = $grandTotal * self::SELLER_SHARE_PERCENTAGE;
+            $todayOwnerShare = $todayTotal * self::OWNER_SHARE_PERCENTAGE;
+            $todaySellerShare = $todayTotal * self::SELLER_SHARE_PERCENTAGE;
+            $yesterdayOwnerShare = $yesterdayTotal * self::OWNER_SHARE_PERCENTAGE;
+            $yesterdaySellerShare = $yesterdayTotal * self::SELLER_SHARE_PERCENTAGE;
+            $monthlyOwnerShare = $monthlyTotal * self::OWNER_SHARE_PERCENTAGE;
+            $monthlySellerShare = $monthlyTotal * self::SELLER_SHARE_PERCENTAGE;
 
             // Red Flag Count - unique combinations of date and seller_id
             $redFlagCount = Sale::where('red_flag', true)
@@ -70,46 +92,16 @@ class DashboardController extends Controller
             // Count unique days with sales
             $daysWithSales = Sale::distinct('date')->count('date');
 
-            // Calculate top 3 performers
-            $allSellers = Seller::all();
-            $performanceData = [];
-
-            foreach ($allSellers as $seller) {
-                $sellerSales = Sale::where('seller_id', $seller->id)
-                    ->with('item')
-                    ->get();
-
-                $totalSalesAmount = $sellerSales->sum(function ($sale) {
-                    $price = $sale->custom_price ?: $sale->item->price;
-                    return ($sale->pick - $sale->returned) * $price;
-                });
-
-                $salesDates = $sellerSales->pluck('date')->unique();
-                $daysWithSales =count($salesDates);
-                $allBusinessDays = Sale::distinct('date')->count('date');
-                $absentDays = max(0, $allBusinessDays - $daysWithSales);
-
-                $volumeScore = $allBusinessDays > 0 ? ($daysWithSales / $allBusinessDays) * 100 : 0;
-                $consistencyScore = $daysWithSales > 0 ? ($daysWithSales / ($daysWithSales + abs($absentDays))) * 100 : 0;
-                $performanceScore = ($volumeScore * 0.5 + $consistencyScore * 0.5);
-
-                if ($totalSalesAmount > 0 || $daysWithSales > 0) {
-                    $performanceData[] = [
-                        'id' => $seller->id,
-                        'name' => $seller->name,
-                        'number' => $seller->number,
-                        'totalSalesAmount' => $totalSalesAmount,
-                        'daysWithSales' => $daysWithSales,
-                        'performanceScore' => round($performanceScore, 2),
-                    ];
+            // Get top 3 performers using cached centralized service (SINGLE SOURCE OF TRUTH)
+            // Cache expensive calculation for 1 hour to improve dashboard load time
+            $topPerformers = Cache::remember(
+                'top_performers',
+                now()->addHours(1),
+                function () {
+                    $performanceService = new SellerPerformanceService();
+                    return $performanceService->getTopPerformers(self::TOP_PERFORMERS_LIMIT)->toArray();
                 }
-            }
-
-            usort($performanceData, function ($a, $b) {
-                return $b['performanceScore'] <=> $a['performanceScore'];
-            });
-
-            $topPerformers = array_slice($performanceData, 0, 3);
+            );
 
             return view('admin.dashboard', compact(
                 'todayTotal',

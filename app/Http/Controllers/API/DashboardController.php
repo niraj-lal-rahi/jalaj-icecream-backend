@@ -8,11 +8,30 @@ use App\Http\Traits\ApiResponse;
 use App\Models\Item;
 use App\Models\Sale;
 use App\Models\Seller;
+use App\Services\SellerPerformanceService;
 use Carbon\Carbon;
 
 class DashboardController extends Controller
 {
     use ApiResponse;
+
+    // === Constants (UPPER_SNAKE_CASE) ===
+    // Profit distribution percentages (must sum to 1.0)
+    private const OWNER_SHARE_PERCENTAGE = 0.6;  // 60% to owner
+    private const SELLER_SHARE_PERCENTAGE = 0.4; // 40% to sellers
+
+    /**
+     * Get dashboard metrics including sales totals and counts
+     *
+     * Returns:
+     * - Today's, yesterday's, monthly, and all-time sales totals
+     * - Owner and seller earnings breakdown
+     * - Red flag transaction count
+     * - Seller and item counts
+     * - Unique transaction and sales day counts
+     *
+     * @return \Illuminate\Http\JsonResponse Dashboard metrics
+     */
     public function index()
     {
         try {
@@ -65,10 +84,10 @@ class DashboardController extends Controller
             $daysWithSales = Sale::distinct('date')->count('date');
 
             // Calculate earnings
-            $ownerEarning = $grandTotal * 0.6;  // 60% to owner
-            $sellerEarning = $grandTotal * 0.4;  // 40% to sellers
-            $yesterdayOwnerShare = $yesterdayTotal * 0.6;
-            $yesterdaySellerShare = $yesterdayTotal * 0.4;
+            $ownerEarning = $grandTotal * self::OWNER_SHARE_PERCENTAGE;
+            $sellerEarning = $grandTotal * self::SELLER_SHARE_PERCENTAGE;
+            $yesterdayOwnerShare = $yesterdayTotal * self::OWNER_SHARE_PERCENTAGE;
+            $yesterdaySellerShare = $yesterdayTotal * self::SELLER_SHARE_PERCENTAGE;
 
             return $this->success([
                 'todayTotal' => $todayTotal,
@@ -92,6 +111,11 @@ class DashboardController extends Controller
 
     /**
      * Get all red flag sales with seller and item details
+     *
+     * Red flags indicate sales that have been manually reviewed/audited.
+     * Results are ordered by date (most recent first).
+     *
+     * @return \Illuminate\Http\JsonResponse Paginated red flag sales with count
      */
     public function getRedFlagSales()
     {
@@ -133,6 +157,12 @@ class DashboardController extends Controller
 
     /**
      * Get all entry days with present and absent sellers per date
+     *
+     * For each sales day in the system, shows which sellers were present
+     * (had sales) and which were absent (no sales). Results are sorted
+     * by date (most recent first).
+     *
+     * @return \Illuminate\Http\JsonResponse Entry days with present/absent sellers and count
      */
     public function getEntryDays()
     {
@@ -187,69 +217,23 @@ class DashboardController extends Controller
 
     /**
      * Get seller performance metrics with ranking
+     *
+     * Returns all sellers ranked by their performance score (highest first).
+     * Performance score is calculated based on:
+     * - Volume Score (50%): Total sales as % of highest seller
+     * - Consistency Score (50%): Days active as % of total days in system
+     *
+     * Uses SellerPerformanceService (SINGLE SOURCE OF TRUTH) to ensure
+     * mobile API rankings match the web admin dashboard.
+     *
+     * @return \Illuminate\Http\JsonResponse Ranked sellers with performance metrics and count
      */
     public function getSellerPerformance()
     {
         try {
-            // Get all unique dates in the system
-            $allDates = Sale::distinct('date')->pluck('date')->toArray();
-            $totalDaysInSystem = count($allDates);
-
-            // Get all sellers with their sales data
-            $sellers = Seller::all();
-
-            $sellerPerformance = $sellers->map(function ($seller) use ($allDates, $totalDaysInSystem) {
-                // Get all sales for this seller
-                $sellerSales = Sale::where('seller_id', $seller->id)->get();
-
-                // Calculate total sales amount
-                $totalSalesAmount = $sellerSales->sum(function ($sale) {
-                    $price = $sale->custom_price ?: $sale->item->price;
-                    return ($sale->pick - $sale->returned) * $price;
-                });
-
-                // Get unique dates this seller has sales
-                $daysWithSales = $sellerSales->pluck('date')->unique()->count();
-
-                // Calculate shares
-                $ownerShare = $totalSalesAmount * 0.6;
-                $sellerShare = $totalSalesAmount * 0.4;
-
-                // Get dates without sales (absent days)
-                $sellerDates = $sellerSales->pluck('date')->unique()->toArray();
-                $absentDays = array_diff($allDates, $sellerDates);
-
-                // Calculate performance score
-                // Volume Score: normalized against max sales
-                $maxSalesAmount = Sale::all()->sum(function ($sale) {
-                    $price = $sale->custom_price ?: $sale->item->price;
-                    return ($sale->pick - $sale->returned) * $price;
-                });
-                $volumeScore = $maxSalesAmount > 0 ? ($totalSalesAmount / $maxSalesAmount) * 100 : 0;
-
-                // Consistency Score: days active vs total days
-                $consistencyScore = $totalDaysInSystem > 0 ? ($daysWithSales / $totalDaysInSystem) * 100 : 0;
-
-                // Final Performance Score (50% volume, 50% consistency)
-                $performanceScore = ($volumeScore * 0.5) + ($consistencyScore * 0.5);
-
-                return [
-                    'id' => $seller->id,
-                    'name' => $seller->name,
-                    'number' => $seller->number,
-                    'totalSalesAmount' => $totalSalesAmount,
-                    'ownerShare' => $ownerShare,
-                    'sellerShare' => $sellerShare,
-                    'daysWithSales' => $daysWithSales,
-                    'absentDays' => count($absentDays),
-                    'totalDays' => $totalDaysInSystem,
-                    'presentDates' => $sellerDates,
-                    'absentDates' => array_values($absentDays),
-                    'volumeScore' => round($volumeScore, 2),
-                    'consistencyScore' => round($consistencyScore, 2),
-                    'performanceScore' => round($performanceScore, 2),
-                ];
-            })->sortByDesc('performanceScore')->values();
+            // Get all seller performance data using centralized service (SINGLE SOURCE OF TRUTH)
+            $performanceService = new SellerPerformanceService();
+            $sellerPerformance = $performanceService->calculateAllSellerPerformance();
 
             return $this->success($sellerPerformance, 'Seller performance data retrieved successfully', 200, [
                 'count' => $sellerPerformance->count(),

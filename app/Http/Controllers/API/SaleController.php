@@ -8,9 +8,15 @@ use App\Http\Traits\ApiResponse;
 use App\Models\Item;
 use App\Models\Sale;
 use App\Models\Seller;
+use App\Exceptions\SaleNotFoundException;
+use App\Exceptions\SellerNotFoundException;
+use App\Exceptions\ItemNotFoundException;
+use App\Http\Requests\CreateSaleRequest;
+use App\Http\Requests\UpdateSaleRequest;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 
 class SaleController extends Controller
 {
@@ -69,20 +75,14 @@ class SaleController extends Controller
 
     /**
      * Store a newly created sale.
+     *
+     * @param CreateSaleRequest $request Validated sale data
+     * @return \Illuminate\Http\JsonResponse Created sale or error response
      */
-    public function store(Request $request)
+    public function store(CreateSaleRequest $request)
     {
         try {
-            $validated = $request->validate([
-                'seller_id' => 'required|exists:sellers,id',
-                'item_id' => 'required|exists:items,id',
-                'pick' => 'required|integer|min:0',
-                'returned' => 'nullable|integer|min:0',
-                'custom_price' => 'nullable|integer|min:0',
-                'red_flag' => 'nullable|boolean',
-                'remarks' => 'nullable|string',
-                'date' => 'required|date',
-            ]);
+            $validated = $request->validated();
 
             // Check if sale already exists for this seller on this date for this item
             $existingSale = Sale::where('seller_id', $validated['seller_id'])
@@ -96,15 +96,10 @@ class SaleController extends Controller
 
             $sale = Sale::create($validated);
 
+            // Invalidate top performers cache as seller performance has changed
+            Cache::forget('top_performers');
+
             return $this->success($sale->load(['seller', 'item']), 'Sale created successfully', 201);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::warning('Validation Error: SaleController::store', [
-                'method' => 'store',
-                'errors' => $e->errors(),
-            ]);
-            return $this->error('Validation failed', 422, null, [
-                'errors' => $e->errors(),
-            ]);
         } catch (\Exception $e) {
             Log::error('API Error: SaleController::store', [
                 'method' => 'store',
@@ -117,23 +112,32 @@ class SaleController extends Controller
 
     /**
      * Display the specified sale.
+     *
+     * @param string $id Sale ID
+     * @return \Illuminate\Http\JsonResponse Sale data or error response
+     * @throws SaleNotFoundException
      */
     public function show(string $id)
     {
         try {
-            $sale = Sale::with(['seller', 'item'])->findOrFail($id);
+            $sale = Sale::with(['seller', 'item'])->find($id);
+
+            if (!$sale) {
+                throw new SaleNotFoundException((int) $id);
+            }
 
             return $this->success($sale, 'Sale retrieved successfully');
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            Log::warning('Not Found: SaleController::show', [
+        } catch (SaleNotFoundException $e) {
+            Log::warning('Sale not found: SaleController::show', [
                 'method' => 'show',
-                'id' => $id,
+                'sale_id' => $id,
+                'message' => $e->getMessage(),
             ]);
-            return $this->error('Sale not found', 404);
+            return $this->error($e->getMessage(), 404);
         } catch (\Exception $e) {
             Log::error('API Error: SaleController::show', [
                 'method' => 'show',
-                'id' => $id,
+                'sale_id' => $id,
                 'error' => $e->getMessage(),
                 'exception' => get_class($e),
             ]);
@@ -143,44 +147,40 @@ class SaleController extends Controller
 
     /**
      * Update the specified sale.
+     *
+     * @param UpdateSaleRequest $request Validated sale data
+     * @param string $id Sale ID to update
+     * @return \Illuminate\Http\JsonResponse Updated sale or error response
+     * @throws SaleNotFoundException
      */
-    public function update(Request $request, string $id)
+    public function update(UpdateSaleRequest $request, string $id)
     {
         try {
-            $sale = Sale::findOrFail($id);
+            $sale = Sale::find($id);
 
-            $validated = $request->validate([
-                'seller_id' => 'sometimes|exists:sellers,id',
-                'date' => 'sometimes|date_format:Y-m-d',
-                'pick' => 'sometimes|integer|min:0',
-                'returned' => 'nullable|integer|min:0',
-                'custom_price' => 'nullable|integer|min:0',
-                'red_flag' => 'nullable|boolean',
-                'remarks' => 'nullable|string',
-            ]);
+            if (!$sale) {
+                throw new SaleNotFoundException((int) $id);
+            }
+
+            $validated = $request->validated();
 
             $sale->update($validated);
 
+            // Invalidate top performers cache as seller performance has changed
+            Cache::forget('top_performers');
+
             return $this->success($sale->load(['seller', 'item']), 'Sale updated successfully');
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            Log::warning('Not Found: SaleController::update', [
+        } catch (SaleNotFoundException $e) {
+            Log::warning('Sale not found: SaleController::update', [
                 'method' => 'update',
-                'id' => $id,
+                'sale_id' => $id,
+                'message' => $e->getMessage(),
             ]);
-            return $this->error('Sale not found', 404);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::warning('Validation Error: SaleController::update', [
-                'method' => 'update',
-                'id' => $id,
-                'errors' => $e->errors(),
-            ]);
-            return $this->error('Validation failed', 422, null, [
-                'errors' => $e->errors(),
-            ]);
+            return $this->error($e->getMessage(), 404);
         } catch (\Exception $e) {
             Log::error('API Error: SaleController::update', [
                 'method' => 'update',
-                'id' => $id,
+                'sale_id' => $id,
                 'error' => $e->getMessage(),
                 'exception' => get_class($e),
             ]);
@@ -190,24 +190,37 @@ class SaleController extends Controller
 
     /**
      * Remove the specified sale.
+     *
+     * @param string $id Sale ID to delete
+     * @return \Illuminate\Http\JsonResponse Success or error response
+     * @throws SaleNotFoundException
      */
     public function destroy(string $id)
     {
         try {
-            $sale = Sale::findOrFail($id);
+            $sale = Sale::find($id);
+
+            if (!$sale) {
+                throw new SaleNotFoundException((int) $id);
+            }
+
             $sale->delete();
 
+            // Invalidate top performers cache as seller performance has changed
+            Cache::forget('top_performers');
+
             return $this->success(null, 'Sale deleted successfully');
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            Log::warning('Not Found: SaleController::destroy', [
+        } catch (SaleNotFoundException $e) {
+            Log::warning('Sale not found: SaleController::destroy', [
                 'method' => 'destroy',
-                'id' => $id,
+                'sale_id' => $id,
+                'message' => $e->getMessage(),
             ]);
-            return $this->error('Sale not found', 404);
+            return $this->error($e->getMessage(), 404);
         } catch (\Exception $e) {
             Log::error('API Error: SaleController::destroy', [
                 'method' => 'destroy',
-                'id' => $id,
+                'sale_id' => $id,
                 'error' => $e->getMessage(),
                 'exception' => get_class($e),
             ]);

@@ -9,10 +9,12 @@ use App\Models\Seller;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use App\Http\Requests\AdminCreateSaleRequest;
 
 class SaleController extends Controller
 {
@@ -75,32 +77,32 @@ class SaleController extends Controller
         return view('admin.sales.create', compact('sellers', 'items'));
     }
 
-    public function store(Request $request)
+    public function store(AdminCreateSaleRequest $request)
     {
-        $request->validate([
-            'seller_id' => 'required|exists:sellers,id',
-            'date' => 'required|date',
-        ]);
+        $validated = $request->validated();
 
-        DB::transaction(function () use ($request) {
+        DB::transaction(function () use ($request, $validated) {
 
             foreach ($request->taken as $item_id => $taken) {
 
                 if ($taken > 0) {
 
                     Sale::create([
-                        'seller_id' => $request->seller_id,
+                        'seller_id' => $validated['seller_id'],
                         'item_id' => $item_id,
                         'pick' => $taken,
                         'returned' => $request->returned[$item_id] ?? 0,
                         'custom_price' => $request->price[$item_id] ?? 0,
                         'remarks' => $request->remarks[$item_id] ?? null,
                         'red_flag' => $request->red_flag ?? false,
-                        'date' => $request->date,
+                        'date' => $validated['date'],
                     ]);
                 }
             }
         });
+
+        // Invalidate top performers cache as seller performance has changed
+        Cache::forget('top_performers');
 
         return redirect()
             ->route('admin.sales.index')
@@ -110,6 +112,9 @@ class SaleController extends Controller
     public function destroy(Sale $sale)
     {
         $sale->delete();
+
+        // Invalidate top performers cache as seller performance has changed
+        Cache::forget('top_performers');
 
         return back()->with('success', 'Sale deleted');
     }
@@ -183,6 +188,9 @@ class SaleController extends Controller
             }
 
         });
+
+        // Invalidate top performers cache as seller performance has changed
+        Cache::forget('top_performers');
 
         return redirect()
             ->route('admin.sales.index')

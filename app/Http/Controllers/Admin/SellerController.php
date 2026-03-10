@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Seller;
 use App\Models\SellerDocument;
 use Illuminate\Http\Request;
+use App\Http\Requests\AdminCreateSellerRequest;
+use App\Http\Requests\UpdateSellerRequest;
 
 class SellerController extends Controller
 {
@@ -21,16 +23,11 @@ class SellerController extends Controller
         return view('admin.sellers.create');
     }
 
-    public function store(Request $request)
+    public function store(AdminCreateSellerRequest $request)
     {
-        $request->validate([
-            'name' => 'required',
-            'number' => 'required',
-            'address' => 'required',
-            'documents.*' => 'file|mimes:pdf,jpg,png',
-        ]);
+        $validated = $request->validated();
 
-        $seller = Seller::create($request->only('name', 'number', 'address'));
+        $seller = Seller::create($validated);
 
         if ($request->hasFile('documents')) {
             foreach ($request->file('documents') as $file) {
@@ -52,15 +49,11 @@ class SellerController extends Controller
         return view('admin.sellers.edit', compact('seller'));
     }
 
-    public function update(Request $request, Seller $seller)
+    public function update(UpdateSellerRequest $request, Seller $seller)
     {
-        $request->validate([
-            'name' => 'required',
-            'number' => 'required',
-            'address' => 'required',
-        ]);
+        $validated = $request->validated();
 
-        $seller->update($request->only('name', 'number', 'address'));
+        $seller->update($validated);
 
         return redirect()->route('admin.sellers.index')
             ->with('success', 'Seller updated successfully');
