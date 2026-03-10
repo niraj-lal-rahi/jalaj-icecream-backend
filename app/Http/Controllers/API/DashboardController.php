@@ -131,21 +131,50 @@ class DashboardController extends Controller
     }
 
     /**
-     * Get all entry days (dates with sales) with count of unique sellers per date
+     * Get all entry days with present and absent sellers per date
      */
     public function getEntryDays()
     {
         try {
-            $entryDays = Sale::selectRaw('date, COUNT(DISTINCT seller_id) as seller_count')
-                ->groupBy('date')
-                ->orderByDesc('date')
-                ->get()
-                ->map(function ($day) {
+            // Get all unique dates and all sellers
+            $allDates = Sale::distinct('date')->pluck('date')->toArray();
+            $allSellers = Seller::all();
+
+            // Build entry days with present and absent sellers
+            $entryDays = collect($allDates)->map(function ($date) use ($allSellers) {
+                // Get sellers with sales on this date (present)
+                $sellerIdsOnDate = Sale::where('date', $date)
+                    ->distinct('seller_id')
+                    ->pluck('seller_id')
+                    ->toArray();
+
+                $presentSellers = $allSellers->whereIn('id', $sellerIdsOnDate)->map(function ($seller) {
                     return [
-                        'date' => $day->date,
-                        'sellerCount' => $day->seller_count,
+                        'id' => $seller->id,
+                        'name' => $seller->name,
+                        'number' => $seller->number,
                     ];
-                });
+                })->values();
+
+                // Get sellers without sales on this date (absent)
+                $absentSellerIds = $allSellers->pluck('id')->toArray();
+                $absentSellerIds = array_diff($absentSellerIds, $sellerIdsOnDate);
+                $absentSellers = $allSellers->whereIn('id', $absentSellerIds)->map(function ($seller) {
+                    return [
+                        'id' => $seller->id,
+                        'name' => $seller->name,
+                        'number' => $seller->number,
+                    ];
+                })->values();
+
+                return [
+                    'date' => $date,
+                    'presentCount' => count($sellerIdsOnDate),
+                    'absentCount' => count($absentSellerIds),
+                    'presentSellers' => $presentSellers,
+                    'absentSellers' => $absentSellers,
+                ];
+            })->sortByDesc('date')->values();
 
             return response()->json([
                 'status' => true,
@@ -174,28 +203,28 @@ class DashboardController extends Controller
 
             // Get all sellers with their sales data
             $sellers = Seller::all();
-            
+
             $sellerPerformance = $sellers->map(function ($seller) use ($allDates, $totalDaysInSystem) {
                 // Get all sales for this seller
                 $sellerSales = Sale::where('seller_id', $seller->id)->get();
-                
+
                 // Calculate total sales amount
                 $totalSalesAmount = $sellerSales->sum(function ($sale) {
                     $price = $sale->custom_price ?: $sale->item->price;
                     return ($sale->pick - $sale->returned) * $price;
                 });
-                
+
                 // Get unique dates this seller has sales
                 $daysWithSales = $sellerSales->pluck('date')->unique()->count();
-                
+
                 // Calculate shares
                 $ownerShare = $totalSalesAmount * 0.6;
                 $sellerShare = $totalSalesAmount * 0.4;
-                
+
                 // Get dates without sales (absent days)
                 $sellerDates = $sellerSales->pluck('date')->unique()->toArray();
                 $absentDays = array_diff($allDates, $sellerDates);
-                
+
                 // Calculate performance score
                 // Volume Score: normalized against max sales
                 $maxSalesAmount = Sale::all()->sum(function ($sale) {
@@ -203,13 +232,13 @@ class DashboardController extends Controller
                     return ($sale->pick - $sale->returned) * $price;
                 });
                 $volumeScore = $maxSalesAmount > 0 ? ($totalSalesAmount / $maxSalesAmount) * 100 : 0;
-                
+
                 // Consistency Score: days active vs total days
                 $consistencyScore = $totalDaysInSystem > 0 ? ($daysWithSales / $totalDaysInSystem) * 100 : 0;
-                
+
                 // Final Performance Score (50% volume, 50% consistency)
                 $performanceScore = ($volumeScore * 0.5) + ($consistencyScore * 0.5);
-                
+
                 return [
                     'id' => $seller->id,
                     'name' => $seller->name,
