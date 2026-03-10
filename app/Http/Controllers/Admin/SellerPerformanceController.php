@@ -5,16 +5,25 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Sale;
 use App\Models\Seller;
-use Carbon\Carbon;
 
 class SellerPerformanceController extends Controller
 {
     public function index()
     {
         try {
+            // Get all unique dates in the system
+            $allDates = Sale::distinct('date')->pluck('date')->toArray();
+            $totalDaysInSystem = count($allDates);
+
+            // Get all sellers with their sales data
             $sellers = Seller::all();
             $allSales = Sale::with('item')->get();
-            $today = Carbon::today();
+
+            // Calculate max sales amount for volume score normalization
+            $maxSalesAmount = $allSales->sum(function ($sale) {
+                $price = $sale->custom_price ?: $sale->item->price;
+                return ($sale->pick - $sale->returned) * $price;
+            });
 
             $performanceData = [];
 
@@ -34,19 +43,18 @@ class SellerPerformanceController extends Controller
                 $presentDates = $salesDates->values()->all();
                 $daysWithSales = count($presentDates);
 
-                // Get all business days (days with any sales)
-                $allBusinessDays = $allSales->pluck('date')->unique()->count();
-                $absentDays = max(0, $allBusinessDays - $daysWithSales);
-                $totalDays = $allBusinessDays;
+                // Volume Score: normalized against max sales (MATCHING API)
+                $volumeScore = $maxSalesAmount > 0 ? ($totalSalesAmount / $maxSalesAmount) * 100 : 0;
 
-                // Volume score (% of business days seller participated)
-                $volumeScore = $totalDays > 0 ? ($daysWithSales / $totalDays) * 100 : 0;
+                // Consistency Score: days active vs total days (MATCHING API)
+                $consistencyScore = $totalDaysInSystem > 0 ? ($daysWithSales / $totalDaysInSystem) * 100 : 0;
 
-                // Consistency score (consistency in appearing on available days)
-                $consistencyScore = $daysWithSales > 0 ? ($daysWithSales / ($daysWithSales + abs($absentDays))) * 100 : 0;
+                // Final Performance Score (50% volume, 50% consistency)
+                $performanceScore = ($volumeScore * 0.5) + ($consistencyScore * 0.5);
 
-                // Performance score (weighted average)
-                $performanceScore = ($volumeScore * 0.5 + $consistencyScore * 0.5);
+                // Get absent days (all dates where seller had no sales)
+                $sellerDates = $salesDates->toArray();
+                $absentDays = array_diff($allDates, $sellerDates);
 
                 $performanceData[] = [
                     'id' => $seller->id,
@@ -56,9 +64,10 @@ class SellerPerformanceController extends Controller
                     'ownerShare' => $totalSalesAmount * 0.6,
                     'sellerShare' => $totalSalesAmount * 0.4,
                     'daysWithSales' => $daysWithSales,
-                    'absentDays' => $absentDays,
-                    'totalDays' => $totalDays,
+                    'absentDays' => count($absentDays),
+                    'totalDays' => $totalDaysInSystem,
                     'presentDates' => $presentDates,
+                    'absentDates' => array_values($absentDays),
                     'volumeScore' => round($volumeScore, 2),
                     'consistencyScore' => round($consistencyScore, 2),
                     'performanceScore' => round($performanceScore, 2),

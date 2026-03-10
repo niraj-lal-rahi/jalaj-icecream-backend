@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Log;
+use App\Http\Traits\ApiResponse;
 use App\Models\Item;
 use App\Models\Sale;
 use App\Models\Seller;
@@ -10,6 +12,7 @@ use Carbon\Carbon;
 
 class DashboardController extends Controller
 {
+    use ApiResponse;
     public function index()
     {
         try {
@@ -67,31 +70,23 @@ class DashboardController extends Controller
             $yesterdayOwnerShare = $yesterdayTotal * 0.6;
             $yesterdaySellerShare = $yesterdayTotal * 0.4;
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Dashboard data retrieved successfully',
-                'data' => [
-                    'todayTotal' => $todayTotal,
-                    'yesterdayTotal' => $yesterdayTotal,
-                    'yesterdayOwnerShare' => $yesterdayOwnerShare,
-                    'yesterdaySellerShare' => $yesterdaySellerShare,
-                    'monthlyTotal' => $monthlyTotal,
-                    'grandTotal' => $grandTotal,
-                    'ownerEarning' => $ownerEarning,
-                    'sellerEarning' => $sellerEarning,
-                    'redFlagCount' => $redFlagCount,
-                    'sellerCount' => $sellerCount,
-                    'itemCount' => $itemCount,
-                    'transactionCount' => $transactionCount,
-                    'daysWithSales' => $daysWithSales,
-                ],
-            ]);
+            return $this->success([
+                'todayTotal' => $todayTotal,
+                'yesterdayTotal' => $yesterdayTotal,
+                'yesterdayOwnerShare' => $yesterdayOwnerShare,
+                'yesterdaySellerShare' => $yesterdaySellerShare,
+                'monthlyTotal' => $monthlyTotal,
+                'grandTotal' => $grandTotal,
+                'ownerEarning' => $ownerEarning,
+                'sellerEarning' => $sellerEarning,
+                'redFlagCount' => $redFlagCount,
+                'sellerCount' => $sellerCount,
+                'itemCount' => $itemCount,
+                'transactionCount' => $transactionCount,
+                'daysWithSales' => $daysWithSales,
+            ], 'Dashboard data retrieved successfully');
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to retrieve dashboard data',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->error('Failed to retrieve dashboard data', 500, $e->getMessage());
         }
     }
 
@@ -128,18 +123,11 @@ class DashboardController extends Controller
                     ];
                 });
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Red flag sales retrieved successfully',
-                'data' => $redFlagSales,
+            return $this->success($redFlagSales, 'Red flag sales retrieved successfully', 200, [
                 'count' => $redFlagSales->count(),
             ]);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to retrieve red flag sales',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->error('Failed to retrieve red flag sales', 500, $e->getMessage());
         }
     }
 
@@ -189,18 +177,11 @@ class DashboardController extends Controller
                 ];
             })->sortByDesc('date')->values();
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Entry days retrieved successfully',
-                'data' => $entryDays,
+            return $this->success($entryDays, 'Entry days retrieved successfully', 200, [
                 'count' => $entryDays->count(),
             ]);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to retrieve entry days',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->error('Failed to retrieve entry days', 500, $e->getMessage());
         }
     }
 
@@ -270,18 +251,11 @@ class DashboardController extends Controller
                 ];
             })->sortByDesc('performanceScore')->values();
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Seller performance data retrieved successfully',
-                'data' => $sellerPerformance,
+            return $this->success($sellerPerformance, 'Seller performance data retrieved successfully', 200, [
                 'count' => $sellerPerformance->count(),
             ]);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to retrieve seller performance',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->error('Failed to retrieve seller performance', 500, $e->getMessage());
         }
     }
 }

@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Log;
+use App\Http\Traits\ApiResponse;
 use App\Models\Item;
 use Illuminate\Http\Request;
 
 class ItemController extends Controller
 {
+    use ApiResponse;
     /**
      * Display a listing of all items.
      */
@@ -17,23 +20,19 @@ class ItemController extends Controller
             $items = Item::orderBy('order_by')
                 ->paginate(50);
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Items retrieved successfully',
-                'data' => $items->items(),
-                'pagination' => [
-                    'total' => $items->total(),
-                    'per_page' => $items->perPage(),
-                    'current_page' => $items->currentPage(),
-                    'last_page' => $items->lastPage(),
-                ],
+            return $this->successPaginated($items->items(), 'Items retrieved successfully', [
+                'total' => $items->total(),
+                'per_page' => $items->perPage(),
+                'current_page' => $items->currentPage(),
+                'last_page' => $items->lastPage(),
             ]);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to retrieve items',
+            Log::error('API Error: ItemController::index', [
+                'method' => 'index',
                 'error' => $e->getMessage(),
-            ], 500);
+                'exception' => get_class($e),
+            ]);
+            return $this->error('Failed to retrieve items', 500, $e->getMessage());
         }
     }
 
@@ -51,23 +50,22 @@ class ItemController extends Controller
 
             $item = Item::create($validated);
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Item created successfully',
-                'data' => $item,
-            ], 201);
+            return $this->success($item, 'Item created successfully', 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Validation failed',
+            Log::warning('Validation Error: ItemController::store', [
+                'method' => 'store',
                 'errors' => $e->errors(),
-            ], 422);
+            ]);
+            return $this->error('Validation failed', 422, null, [
+                'errors' => $e->errors(),
+            ]);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to create item',
+            Log::error('API Error: ItemController::store', [
+                'method' => 'store',
                 'error' => $e->getMessage(),
-            ], 500);
+                'exception' => get_class($e),
+            ]);
+            return $this->error('Failed to create item', 500, $e->getMessage());
         }
     }
 
@@ -79,22 +77,21 @@ class ItemController extends Controller
         try {
             $item = Item::findOrFail($id);
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Item retrieved successfully',
-                'data' => $item,
-            ]);
+            return $this->success($item, 'Item retrieved successfully');
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Item not found',
-            ], 404);
+            Log::warning('Not Found: ItemController::show', [
+                'method' => 'show',
+                'id' => $id,
+            ]);
+            return $this->error('Item not found', 404);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to retrieve item',
+            Log::error('API Error: ItemController::show', [
+                'method' => 'show',
+                'id' => $id,
                 'error' => $e->getMessage(),
-            ], 500);
+                'exception' => get_class($e),
+            ]);
+            return $this->error('Failed to retrieve item', 500, $e->getMessage());
         }
     }
 
@@ -114,28 +111,30 @@ class ItemController extends Controller
 
             $item->update($validated);
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Item updated successfully',
-                'data' => $item,
-            ]);
+            return $this->success($item, 'Item updated successfully');
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Item not found',
-            ], 404);
+            Log::warning('Not Found: ItemController::update', [
+                'method' => 'update',
+                'id' => $id,
+            ]);
+            return $this->error('Item not found', 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Validation failed',
+            Log::warning('Validation Error: ItemController::update', [
+                'method' => 'update',
+                'id' => $id,
                 'errors' => $e->errors(),
-            ], 422);
+            ]);
+            return $this->error('Validation failed', 422, null, [
+                'errors' => $e->errors(),
+            ]);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to update item',
+            Log::error('API Error: ItemController::update', [
+                'method' => 'update',
+                'id' => $id,
                 'error' => $e->getMessage(),
-            ], 500);
+                'exception' => get_class($e),
+            ]);
+            return $this->error('Failed to update item', 500, $e->getMessage());
         }
     }
 
@@ -148,21 +147,21 @@ class ItemController extends Controller
             $item = Item::findOrFail($id);
             $item->delete();
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Item deleted successfully',
-            ]);
+            return $this->success(null, 'Item deleted successfully');
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Item not found',
-            ], 404);
+            Log::warning('Not Found: ItemController::destroy', [
+                'method' => 'destroy',
+                'id' => $id,
+            ]);
+            return $this->error('Item not found', 404);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to delete item',
+            Log::error('API Error: ItemController::destroy', [
+                'method' => 'destroy',
+                'id' => $id,
                 'error' => $e->getMessage(),
-            ], 500);
+                'exception' => get_class($e),
+            ]);
+            return $this->error('Failed to delete item', 500, $e->getMessage());
         }
     }
 }

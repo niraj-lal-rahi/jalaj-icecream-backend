@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Log;
+use App\Http\Traits\ApiResponse;
 use App\Models\Seller;
 use Illuminate\Http\Request;
 
 class SellerController extends Controller
 {
+    use ApiResponse;
     /**
      * Display a listing of all sellers.
      */
@@ -18,23 +21,19 @@ class SellerController extends Controller
                 ->orderBy('name')
                 ->paginate(20);
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Sellers retrieved successfully',
-                'data' => $sellers->items(),
-                'pagination' => [
-                    'total' => $sellers->total(),
-                    'per_page' => $sellers->perPage(),
-                    'current_page' => $sellers->currentPage(),
-                    'last_page' => $sellers->lastPage(),
-                ],
+            return $this->successPaginated($sellers->items(), 'Sellers retrieved successfully', [
+                'total' => $sellers->total(),
+                'per_page' => $sellers->perPage(),
+                'current_page' => $sellers->currentPage(),
+                'last_page' => $sellers->lastPage(),
             ]);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to retrieve sellers',
+            Log::error('API Error: SellerController::index', [
+                'method' => 'index',
                 'error' => $e->getMessage(),
-            ], 500);
+                'exception' => get_class($e),
+            ]);
+            return $this->error('Failed to retrieve sellers', 500, $e->getMessage());
         }
     }
 
@@ -52,23 +51,22 @@ class SellerController extends Controller
 
             $seller = Seller::create($validated);
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Seller created successfully',
-                'data' => $seller->load('documents'),
-            ], 201);
+            return $this->success($seller->load('documents'), 'Seller created successfully', 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Validation failed',
+            Log::warning('Validation Error: SellerController::store', [
+                'method' => 'store',
                 'errors' => $e->errors(),
-            ], 422);
+            ]);
+            return $this->error('Validation failed', 422, null, [
+                'errors' => $e->errors(),
+            ]);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to create seller',
+            Log::error('API Error: SellerController::store', [
+                'method' => 'store',
                 'error' => $e->getMessage(),
-            ], 500);
+                'exception' => get_class($e),
+            ]);
+            return $this->error('Failed to create seller', 500, $e->getMessage());
         }
     }
 
@@ -80,22 +78,21 @@ class SellerController extends Controller
         try {
             $seller = Seller::with('documents')->findOrFail($id);
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Seller retrieved successfully',
-                'data' => $seller,
-            ]);
+            return $this->success($seller, 'Seller retrieved successfully');
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Seller not found',
-            ], 404);
+            Log::warning('Not Found: SellerController::show', [
+                'method' => 'show',
+                'id' => $id,
+            ]);
+            return $this->error('Seller not found', 404);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to retrieve seller',
+            Log::error('API Error: SellerController::show', [
+                'method' => 'show',
+                'id' => $id,
                 'error' => $e->getMessage(),
-            ], 500);
+                'exception' => get_class($e),
+            ]);
+            return $this->error('Failed to retrieve seller', 500, $e->getMessage());
         }
     }
 
@@ -115,28 +112,30 @@ class SellerController extends Controller
 
             $seller->update($validated);
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Seller updated successfully',
-                'data' => $seller->load('documents'),
-            ]);
+            return $this->success($seller->load('documents'), 'Seller updated successfully');
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Seller not found',
-            ], 404);
+            Log::warning('Not Found: SellerController::update', [
+                'method' => 'update',
+                'id' => $id,
+            ]);
+            return $this->error('Seller not found', 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Validation failed',
+            Log::warning('Validation Error: SellerController::update', [
+                'method' => 'update',
+                'id' => $id,
                 'errors' => $e->errors(),
-            ], 422);
+            ]);
+            return $this->error('Validation failed', 422, null, [
+                'errors' => $e->errors(),
+            ]);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to update seller',
+            Log::error('API Error: SellerController::update', [
+                'method' => 'update',
+                'id' => $id,
                 'error' => $e->getMessage(),
-            ], 500);
+                'exception' => get_class($e),
+            ]);
+            return $this->error('Failed to update seller', 500, $e->getMessage());
         }
     }
 
@@ -149,21 +148,21 @@ class SellerController extends Controller
             $seller = Seller::findOrFail($id);
             $seller->delete();
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Seller deleted successfully',
-            ]);
+            return $this->success(null, 'Seller deleted successfully');
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Seller not found',
-            ], 404);
+            Log::warning('Not Found: SellerController::destroy', [
+                'method' => 'destroy',
+                'id' => $id,
+            ]);
+            return $this->error('Seller not found', 404);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to delete seller',
+            Log::error('API Error: SellerController::destroy', [
+                'method' => 'destroy',
+                'id' => $id,
                 'error' => $e->getMessage(),
-            ], 500);
+                'exception' => get_class($e),
+            ]);
+            return $this->error('Failed to delete seller', 500, $e->getMessage());
         }
     }
 }

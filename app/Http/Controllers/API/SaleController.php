@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Log;
+use App\Http\Traits\ApiResponse;
 use App\Models\Item;
 use App\Models\Sale;
 use App\Models\Seller;
@@ -12,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 
 class SaleController extends Controller
 {
+    use ApiResponse;
     /**
      * Display a listing of all sales.
      *
@@ -53,23 +56,14 @@ class SaleController extends Controller
                 ->orderBy('seller_id')
                 ->paginate($request->get('limit', 30));
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Sales retrieved successfully',
-                'data' => $sales->items(),
-                'pagination' => [
-                    'total' => $sales->total(),
-                    'per_page' => $sales->perPage(),
-                    'current_page' => $sales->currentPage(),
-                    'last_page' => $sales->lastPage(),
-                ],
+            return $this->successPaginated($sales->items(), 'Sales retrieved successfully', [
+                'total' => $sales->total(),
+                'per_page' => $sales->perPage(),
+                'current_page' => $sales->currentPage(),
+                'last_page' => $sales->lastPage(),
             ]);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to retrieve sales',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->error('Failed to retrieve sales', 500, $e->getMessage());
         }
     }
 
@@ -97,31 +91,27 @@ class SaleController extends Controller
                 ->first();
 
             if ($existingSale) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Sale already exists for this seller on this date for this item',
-                ], 409);
+                return $this->error('Sale already exists for this seller on this date for this item', 409);
             }
 
             $sale = Sale::create($validated);
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Sale created successfully',
-                'data' => $sale->load(['seller', 'item']),
-            ], 201);
+            return $this->success($sale->load(['seller', 'item']), 'Sale created successfully', 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Validation failed',
+            Log::warning('Validation Error: SaleController::store', [
+                'method' => 'store',
                 'errors' => $e->errors(),
-            ], 422);
+            ]);
+            return $this->error('Validation failed', 422, null, [
+                'errors' => $e->errors(),
+            ]);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to create sale',
+            Log::error('API Error: SaleController::store', [
+                'method' => 'store',
                 'error' => $e->getMessage(),
-            ], 500);
+                'exception' => get_class($e),
+            ]);
+            return $this->error('Failed to create sale', 500, $e->getMessage());
         }
     }
 
@@ -133,22 +123,21 @@ class SaleController extends Controller
         try {
             $sale = Sale::with(['seller', 'item'])->findOrFail($id);
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Sale retrieved successfully',
-                'data' => $sale,
-            ]);
+            return $this->success($sale, 'Sale retrieved successfully');
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Sale not found',
-            ], 404);
+            Log::warning('Not Found: SaleController::show', [
+                'method' => 'show',
+                'id' => $id,
+            ]);
+            return $this->error('Sale not found', 404);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to retrieve sale',
+            Log::error('API Error: SaleController::show', [
+                'method' => 'show',
+                'id' => $id,
                 'error' => $e->getMessage(),
-            ], 500);
+                'exception' => get_class($e),
+            ]);
+            return $this->error('Failed to retrieve sale', 500, $e->getMessage());
         }
     }
 
@@ -172,28 +161,30 @@ class SaleController extends Controller
 
             $sale->update($validated);
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Sale updated successfully',
-                'data' => $sale->load(['seller', 'item']),
-            ]);
+            return $this->success($sale->load(['seller', 'item']), 'Sale updated successfully');
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Sale not found',
-            ], 404);
+            Log::warning('Not Found: SaleController::update', [
+                'method' => 'update',
+                'id' => $id,
+            ]);
+            return $this->error('Sale not found', 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Validation failed',
+            Log::warning('Validation Error: SaleController::update', [
+                'method' => 'update',
+                'id' => $id,
                 'errors' => $e->errors(),
-            ], 422);
+            ]);
+            return $this->error('Validation failed', 422, null, [
+                'errors' => $e->errors(),
+            ]);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to update sale',
+            Log::error('API Error: SaleController::update', [
+                'method' => 'update',
+                'id' => $id,
                 'error' => $e->getMessage(),
-            ], 500);
+                'exception' => get_class($e),
+            ]);
+            return $this->error('Failed to update sale', 500, $e->getMessage());
         }
     }
 
@@ -206,21 +197,21 @@ class SaleController extends Controller
             $sale = Sale::findOrFail($id);
             $sale->delete();
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Sale deleted successfully',
-            ]);
+            return $this->success(null, 'Sale deleted successfully');
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Sale not found',
-            ], 404);
+            Log::warning('Not Found: SaleController::destroy', [
+                'method' => 'destroy',
+                'id' => $id,
+            ]);
+            return $this->error('Sale not found', 404);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to delete sale',
+            Log::error('API Error: SaleController::destroy', [
+                'method' => 'destroy',
+                'id' => $id,
                 'error' => $e->getMessage(),
-            ], 500);
+                'exception' => get_class($e),
+            ]);
+            return $this->error('Failed to delete sale', 500, $e->getMessage());
         }
     }
 
@@ -237,28 +228,26 @@ class SaleController extends Controller
                 ->orderByDesc('date')
                 ->paginate($request->get('limit', 30));
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Sales retrieved successfully',
-                'data' => $sales->items(),
-                'pagination' => [
-                    'total' => $sales->total(),
-                    'per_page' => $sales->perPage(),
-                    'current_page' => $sales->currentPage(),
-                    'last_page' => $sales->lastPage(),
-                ],
+            return $this->successPaginated($sales->items(), 'Sales retrieved successfully', [
+                'total' => $sales->total(),
+                'per_page' => $sales->perPage(),
+                'current_page' => $sales->currentPage(),
+                'last_page' => $sales->lastPage(),
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Seller not found',
-            ], 404);
+            Log::warning('Not Found: SaleController::showSellerSales', [
+                'method' => 'showSellerSales',
+                'seller_id' => $sellerId,
+            ]);
+            return $this->error('Seller not found', 404);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to retrieve seller sales',
+            Log::error('API Error: SaleController::showSellerSales', [
+                'method' => 'showSellerSales',
+                'seller_id' => $sellerId,
                 'error' => $e->getMessage(),
-            ], 500);
+                'exception' => get_class($e),
+            ]);
+            return $this->error('Failed to retrieve seller sales', 500, $e->getMessage());
         }
     }
 }
