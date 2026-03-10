@@ -3,26 +3,56 @@
 namespace App\Services;
 
 use App\Models\Sale;
+use App\Repositories\Contracts\SaleRepository;
 use Carbon\Carbon;
 
+/**
+ * SalesReportExporter
+ *
+ * Generates and exports sales reports in multiple formats (CSV, Summary text).
+ *
+ * Key Responsibilities:
+ * - Generate CSV sales reports for a specific date
+ * - Generate text summary reports for a specific date
+ * - Export reports to file storage
+ * - Format sales data including profit calculations
+ *
+ * Architecture:
+ * - Uses SaleRepository for all database queries (never direct model calls)
+ * - All profit sharing percentages loaded from config/profit.php
+ * - Reports include seller-wise breakdown and grand totals
+ *
+ * Dependency Injection:
+ * - Accepts SaleRepository via constructor
+ * - Loaded via AppServiceProvider dependency bindings
+ *
+ * Configuration:
+ * - config/profit.php: owner_share, seller_share (profit split percentages)
+ *
+ * Usage in Controllers:
+ * $exporter = app(SalesReportExporter::class);
+ * $csv = $exporter->generateCSV('2024-01-15');
+ * $filePath = $exporter->exportToFile('2024-01-15');
+ */
 class SalesReportExporter
 {
-    /**
-     * Generate CSV content for sales report
-     *
-     * @param string $date Date in format YYYY-MM-DD (default: today)
-     * @return string CSV content
-     */
+    /** SaleRepository for all sale queries (never use Sale::query() directly) */
+    private SaleRepository $saleRepository;
+
+    /** Constructor - accepts SaleRepository via DI (bound in AppServiceProvider) */
+    public function __construct(SaleRepository $saleRepository)
+    {
+        $this->saleRepository = $saleRepository;
+    }
+    /** Generate CSV sales report for a specific date (uses repository, dynamic config) */
     public function generateCSV(string $date = ''): string
     {
         if (empty($date)) {
             $date = Carbon::now()->format('Y-m-d');
         }
 
-        // Fetch sales for the given date
-        $sales = Sale::where('date', $date)
-            ->with(['seller', 'item'])
-            ->get();
+        // Fetch sales for the given date using repository (not direct model call)
+        $sales = $this->saleRepository->getByDate($date);
 
         $csv = "Date,Seller Name,Item Name,Pick,Returned,Net Qty,Price,Total\n";
 
@@ -30,11 +60,12 @@ class SalesReportExporter
             return $csv;
         }
 
-        // Group by seller
+        // Group by seller for summary calculations
         $groupedBySeller = $sales->groupBy('seller_id');
 
         $grandTotal = 0;
         $grandShare = 0;
+        $ownerSharePercentage = config('profit.owner_share');
 
         foreach ($groupedBySeller as $sellerId => $sellerSales) {
             $sellerName = $sellerSales->first()->seller->name ?? 'Unknown Seller';
@@ -64,37 +95,35 @@ class SalesReportExporter
             }
 
             // Add seller summary rows
-            $sellerShare = (int)($sellerTotal * 0.6);
+            // Owner share calculation using config value (not hardcoded 0.6)
+            $ownerShare = (int)($sellerTotal * $ownerSharePercentage);
+            $sharePercentage = (int)($ownerSharePercentage * 100);
+
             $csv .= sprintf('"%s","%s - TOTAL","","","","","","%d"' . "\n", $date, $sellerName, $sellerTotal);
-            $csv .= sprintf('"%s","%s - SHARE (60%%)","","","","","","%d"' . "\n", $date, $sellerName, $sellerShare);
+            $csv .= sprintf('"%s","%s - SHARE (%d%%)","","","","","","%d"' . "\n", $date, $sellerName, $sharePercentage, $ownerShare);
 
             $grandTotal += $sellerTotal;
-            $grandShare += $sellerShare;
+            $grandShare += $ownerShare;
         }
 
         // Add grand total rows
         $csv .= "\n";
         $csv .= sprintf('"","GRAND TOTAL","","","","","","%d"' . "\n", $grandTotal);
-        $csv .= sprintf('"","TOTAL SHARE (60%%)","","","","","","%d"' . "\n", $grandShare);
+        $sharePercentage = (int)(config('profit.owner_share') * 100);
+        $csv .= sprintf('"","TOTAL SHARE (%d%%)","","","","","","%d"' . "\n", $sharePercentage, $grandShare);
 
         return $csv;
     }
 
-    /**
-     * Generate summary text for the sales report
-     *
-     * @param string $date Date in format YYYY-MM-DD (default: today)
-     * @return string Summary text
-     */
+    /** Generate text summary report for a specific date (uses repository, dynamic config) */
     public function generateSummary(string $date = ''): string
     {
         if (empty($date)) {
             $date = Carbon::now()->format('Y-m-d');
         }
 
-        $sales = Sale::where('date', $date)
-            ->with(['seller', 'item'])
-            ->get();
+        // Fetch sales for the given date using repository (not direct model call)
+        $sales = $this->saleRepository->getByDate($date);
 
         $summary = "═══════════════════════════════════════════\n";
         $summary .= "📊 SALES REPORT - " . strtoupper($date) . "\n";
@@ -106,10 +135,12 @@ class SalesReportExporter
             return $summary;
         }
 
-        // Group by seller
+        // Group by seller for itemized breakdown
         $groupedBySeller = $sales->groupBy('seller_id');
         $grandTotal = 0;
         $grandShare = 0;
+        $ownerSharePercentage = config('profit.owner_share');
+        $sharePercentageLabel = (int)($ownerSharePercentage * 100) . '%';
 
         foreach ($groupedBySeller as $sellerId => $sellerSales) {
             $sellerName = $sellerSales->first()->seller->name ?? 'Unknown Seller';
@@ -124,19 +155,20 @@ class SalesReportExporter
                 $itemCount++;
             }
 
-            $sellerShare = (int)($sellerTotal * 0.6);
+            // Calculate owner share using config value (not hardcoded 0.6)
+            $ownerShare = (int)($sellerTotal * $ownerSharePercentage);
             $summary .= "👤 {$sellerName}\n";
             $summary .= "   Items: {$itemCount}\n";
             $summary .= "   Total: ₹" . number_format($sellerTotal) . "\n";
-            $summary .= "   Share (60%): ₹" . number_format($sellerShare) . "\n\n";
+            $summary .= "   Share ({$sharePercentageLabel}): ₹" . number_format($ownerShare) . "\n\n";
 
             $grandTotal += $sellerTotal;
-            $grandShare += $sellerShare;
+            $grandShare += $ownerShare;
         }
 
         $summary .= "═══════════════════════════════════════════\n";
         $summary .= "Total Sales: ₹" . number_format($grandTotal) . "\n";
-        $summary .= "Total Share (60%): ₹" . number_format($grandShare) . "\n";
+        $summary .= "Total Share ({$sharePercentageLabel}): ₹" . number_format($grandShare) . "\n";
         $summary .= "═══════════════════════════════════════════\n";
 
         return $summary;
