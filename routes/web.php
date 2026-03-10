@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\RedFlagController;
+use App\Http\Controllers\Admin\EntryDayController;
+use App\Http\Controllers\Admin\SellerPerformanceController;
 use App\Http\Controllers\Admin\ItemController;
 use App\Http\Controllers\Admin\SaleController;
 use App\Http\Controllers\Admin\SellerController;
@@ -25,6 +28,17 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])
         ->name('dashboard');
+
+    // Dashboard Feature Pages
+    Route::get('/red-flags', [RedFlagController::class, 'index'])
+        ->name('red-flags.index');
+
+    Route::get('/entry-days', [EntryDayController::class, 'index'])
+        ->name('entry-days.index');
+
+    Route::get('/seller-performance', [SellerPerformanceController::class, 'index'])
+        ->name('seller-performance.index');
+
     Route::get('sellers', [SellerController::class, 'index'])
         ->middleware('permission:seller.view')
         ->name('sellers.index');
