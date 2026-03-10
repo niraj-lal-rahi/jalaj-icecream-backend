@@ -31,10 +31,11 @@ class AuthController extends Controller
 
         $token = $user->createToken('mobile-token')->plainTextToken;
 
-        return $this->success([
+        // Return flattened response for mobile app compatibility
+        return $this->success(null, 'Login successful', 200, [
             'token' => $token,
             'user' => $user,
-        ], 'Login successful');
+        ]);
     }
 
     public function getProfile(Request $request)
