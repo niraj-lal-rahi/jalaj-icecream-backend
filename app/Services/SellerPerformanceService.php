@@ -40,8 +40,15 @@ class SellerPerformanceService
         $allDates = $allSales->pluck('date')->unique()->sort()->values()->toArray();
         $totalDaysInSystem = count($allDates);
 
-        // Calculate max sales amount ONCE for all sellers (for volume score normalization)
-        $maxSalesAmount = $this->calculateMaxSalesAmount($allSales);
+        // Calculate total sales amount for each seller first
+        $sellerTotals = [];
+        foreach ($sellers as $seller) {
+            $sellerSales = $allSales->filter(fn($sale) => $sale->seller_id === $seller->id);
+            $sellerTotals[$seller->id] = $this->calculateTotalSalesAmount($sellerSales);
+        }
+
+        // Find max sales amount from all sellers (highest individual seller total, for volume score normalization)
+        $maxSalesAmount = max($sellerTotals) ?: 0;
 
         // Calculate performance metrics for each seller
         return $sellers->map(function ($seller) use ($allDates, $totalDaysInSystem, $allSales, $maxSalesAmount) {
@@ -104,15 +111,6 @@ class SellerPerformanceService
             'consistencyScore' => round($consistencyScore, config('performance.score_precision')),
             'performanceScore' => round($performanceScore, config('performance.score_precision')),
         ];
-    }
-
-    /** Calculate max sales amount (used to normalize volume scores 0-100) */
-    private function calculateMaxSalesAmount(Collection $allSales): float
-    {
-        return (float) $allSales->sum(function (Sale $sale) {
-            $price = $sale->custom_price ?: $sale->item->price;
-            return ($sale->pick - $sale->returned) * $price;
-        });
     }
 
     /** Calculate total sales amount for a specific seller (accounts for custom pricing) */
