@@ -14,10 +14,18 @@ class DashboardController extends Controller
     {
         try {
             $today = Carbon::today();
+            $yesterday = $today->clone()->subDay();
 
             // Today's Total Sales
             $todaySales = Sale::whereDate('date', $today)->get();
             $todayTotal = $todaySales->sum(function ($sale) {
+                $price = $sale->custom_price ?: $sale->item->price;
+                return ($sale->pick - $sale->returned) * $price;
+            });
+
+            // Yesterday's Total Sales
+            $yesterdaySales = Sale::whereDate('date', $yesterday)->get();
+            $yesterdayTotal = $yesterdaySales->sum(function ($sale) {
                 $price = $sale->custom_price ?: $sale->item->price;
                 return ($sale->pick - $sale->returned) * $price;
             });
@@ -56,12 +64,17 @@ class DashboardController extends Controller
             // Calculate earnings
             $ownerEarning = $grandTotal * 0.6;  // 60% to owner
             $sellerEarning = $grandTotal * 0.4;  // 40% to sellers
+            $yesterdayOwnerShare = $yesterdayTotal * 0.6;
+            $yesterdaySellerShare = $yesterdayTotal * 0.4;
 
             return response()->json([
                 'status' => true,
                 'message' => 'Dashboard data retrieved successfully',
                 'data' => [
                     'todayTotal' => $todayTotal,
+                    'yesterdayTotal' => $yesterdayTotal,
+                    'yesterdayOwnerShare' => $yesterdayOwnerShare,
+                    'yesterdaySellerShare' => $yesterdaySellerShare,
                     'monthlyTotal' => $monthlyTotal,
                     'grandTotal' => $grandTotal,
                     'ownerEarning' => $ownerEarning,
