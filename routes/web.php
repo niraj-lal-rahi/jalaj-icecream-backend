@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\RedFlagController;
 use App\Http\Controllers\Admin\EntryDayController;
 use App\Http\Controllers\Admin\SellerPerformanceController;
+use App\Http\Controllers\Admin\DatabaseDumpController;
 use App\Http\Controllers\Admin\ItemController;
 use App\Http\Controllers\Admin\SaleController;
 use App\Http\Controllers\Admin\SellerController;
@@ -38,6 +39,16 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
 
     Route::get('/seller-performance', [SellerPerformanceController::class, 'index'])
         ->name('seller-performance.index');
+
+    // Database Dumps
+    Route::get('database-dumps', [DatabaseDumpController::class, 'index'])
+        ->name('database-dumps.index');
+    Route::post('database-dumps/create', [DatabaseDumpController::class, 'create'])
+        ->name('database-dumps.create');
+    Route::get('database-dumps/download/{filename}', [DatabaseDumpController::class, 'download'])
+        ->name('database-dumps.download');
+    Route::delete('database-dumps/delete/{filename}', [DatabaseDumpController::class, 'delete'])
+        ->name('database-dumps.delete');
 
     Route::get('sellers', [SellerController::class, 'index'])
         ->middleware('permission:seller.view')
