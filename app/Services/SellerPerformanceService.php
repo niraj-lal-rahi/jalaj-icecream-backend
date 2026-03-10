@@ -48,7 +48,15 @@ class SellerPerformanceService
         }
 
         // Find max sales amount from all sellers (highest individual seller total, for volume score normalization)
-        $maxSalesAmount = max($sellerTotals) ?: 0;
+        $maxSalesAmount = !empty($sellerTotals) ? max($sellerTotals) : 0;
+        
+        // Debug logging
+        \Log::info('SellerPerformanceService Debug', [
+            'seller_count' => count($sellers),
+            'total_sales_records' => $allSales->count(),
+            'seller_totals' => $sellerTotals,
+            'max_sales_amount' => $maxSalesAmount,
+        ]);
 
         // Calculate performance metrics for each seller
         return $sellers->map(function ($seller) use ($allDates, $totalDaysInSystem, $allSales, $maxSalesAmount) {
@@ -94,6 +102,19 @@ class SellerPerformanceService
         $volumeScore = $this->calculateVolumeScore($totalSalesAmount, $maxSalesAmount);
         $consistencyScore = $this->calculateConsistencyScore($daysWithSales, $totalDaysInSystem);
         $performanceScore = $this->calculatePerformanceScore($volumeScore, $consistencyScore);
+
+        // Debug log for specific sellers
+        if (in_array($seller->name, ['Jibodh'])) {
+            \Log::info("Seller: {$seller->name}", [
+                'totalSalesAmount' => $totalSalesAmount,
+                'maxSalesAmount' => $maxSalesAmount,
+                'volumeScore' => $volumeScore,
+                'consistencyScore' => $consistencyScore,
+                'performanceScore' => $performanceScore,
+                'daysWithSales' => $daysWithSales,
+                'totalDaysInSystem' => $totalDaysInSystem,
+            ]);
+        }
 
         return [
             'id' => $seller->id,
