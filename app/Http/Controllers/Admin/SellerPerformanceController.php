@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Repositories\SaleRepository;
-use App\Repositories\SellerRepository;
+use App\Repositories\Contracts\SaleRepository;
+use App\Repositories\Contracts\SellerRepository;
 use App\Services\SellerPerformanceService;
 
 class SellerPerformanceController extends Controller
