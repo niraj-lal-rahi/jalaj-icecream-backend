@@ -161,6 +161,8 @@ class SaleController extends Controller
             $sale = Sale::findOrFail($id);
 
             $validated = $request->validate([
+                'seller_id' => 'sometimes|exists:sellers,id',
+                'date' => 'sometimes|date_format:Y-m-d',
                 'pick' => 'sometimes|integer|min:0',
                 'returned' => 'nullable|integer|min:0',
                 'custom_price' => 'nullable|integer|min:0',
