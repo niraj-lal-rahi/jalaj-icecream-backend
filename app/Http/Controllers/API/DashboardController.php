@@ -30,7 +30,24 @@ class DashboardController extends Controller
 
             $stats = $statisticsService->getAllStatistics();
 
-            return $this->success($stats, 'Dashboard data retrieved successfully');
+            // Format for mobile app (flatten nested earnings)
+            $formattedData = [
+                'todayTotal' => $stats['todayTotal'],
+                'yesterdayTotal' => $stats['yesterdayTotal'],
+                'yesterdayOwnerShare' => $stats['yesterdayEarnings']['ownerShare'],
+                'yesterdaySellerShare' => $stats['yesterdayEarnings']['sellerShare'],
+                'monthlyTotal' => $stats['monthlyTotal'],
+                'grandTotal' => $stats['grandTotal'],
+                'ownerEarning' => $stats['allTimeEarnings']['ownerShare'],
+                'sellerEarning' => $stats['allTimeEarnings']['sellerShare'],
+                'redFlagCount' => $stats['redFlagCount'],
+                'sellerCount' => $stats['sellerCount'],
+                'itemCount' => $stats['itemCount'],
+                'transactionCount' => $stats['transactionCount'],
+                'daysWithSales' => $stats['daysWithSales'],
+            ];
+
+            return $this->success($formattedData, 'Dashboard data retrieved successfully');
         } catch (\Exception $e) {
             return $this->error('Failed to retrieve dashboard data', 500, $e->getMessage());
         }
