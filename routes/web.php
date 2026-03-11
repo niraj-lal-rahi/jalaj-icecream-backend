@@ -37,6 +37,9 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('/entry-days', [EntryDayController::class, 'index'])
         ->name('entry-days.index');
 
+    Route::get('/entry-days/{date}', [EntryDayController::class, 'show'])
+        ->name('entry-days.show');
+
     Route::get('/seller-performance', [SellerPerformanceController::class, 'index'])
         ->name('seller-performance.index');
 

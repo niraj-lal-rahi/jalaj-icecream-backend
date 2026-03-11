@@ -16,22 +16,26 @@ class EntryDayController extends Controller
     public function index()
     {
         try {
-            // Get all unique dates with sales (single query)
-            $datesWithSales = $this->saleRepository->getAll()
-                ->distinct('date')
-                ->orderBy('date', 'desc')
-                ->pluck('date');
+            // Get all sales with relationships
+            $allSales = $this->saleRepository->getAll();
 
-            // Fetch all sellers once (single query)
+            // Group sales by date
+            $datesWithSales = $allSales->groupBy('date')
+                ->keys()
+                ->sort()
+                ->reverse();
+
+            // Fetch all sellers once
             $allSellers = $this->sellerRepository->getAll();
 
             $entryDays = [];
 
             foreach ($datesWithSales as $date) {
                 // Get sellers who had sales on this date
-                $sellersWithSalesOnDate = $this->saleRepository->getByDate($date)
-                    ->distinct('seller_id')
+                $sellersWithSalesOnDate = $allSales
+                    ->where('date', $date)
                     ->pluck('seller_id')
+                    ->unique()
                     ->toArray();
 
                 // Filter in-memory from already-fetched sellers
@@ -55,7 +59,35 @@ class EntryDayController extends Controller
 
             return view('admin.entry-days.index', compact('entryDays'));
         } catch (\Exception $e) {
-            return redirect()->route('dashboard')->with('error', 'Failed to load entry days: ' . $e->getMessage());
+            return redirect()->route('admin.dashboard')->with('error', 'Failed to load entry days: ' . $e->getMessage());
+        }
+    }
+
+    public function show($date)
+    {
+        try {
+            // Get all sales for the specific date
+            $sales = $this->saleRepository->getByDate($date);
+
+            if ($sales->isEmpty()) {
+                return redirect()->route('admin.entry-days.index')->with('warning', 'No sales found for this date.');
+            }
+
+            // Get unique sellers for this date
+            $sellersWithSales = $sales->unique('seller_id')->pluck('seller');
+            $date = \Carbon\Carbon::parse($date)->format('Y-m-d');
+
+            // Calculate summary stats
+            $totalSales = $sales->sum(function ($sale) {
+                return ($sale->pick - $sale->returned) * ($sale->custom_price ?: $sale->item->price);
+            });
+
+            $totalItems = $sales->sum('pick');
+            $totalReturned = $sales->sum('returned');
+
+            return view('admin.entry-days.show', compact('date', 'sales', 'sellersWithSales', 'totalSales', 'totalItems', 'totalReturned'));
+        } catch (\Exception $e) {
+            return redirect()->route('admin.entry-days.index')->with('error', 'Failed to load sales data: ' . $e->getMessage());
         }
     }
 }

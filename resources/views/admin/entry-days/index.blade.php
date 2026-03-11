@@ -13,14 +13,17 @@
     @else
         @foreach ($entryDays as $day)
             <div class="card mb-3 shadow-sm">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">
-                        📅 {{ \Carbon\Carbon::parse($day['date'])->format('D, M d, Y') }}
-                        <span class="badge bg-light text-primary ms-2">
-                            ✓ {{ $day['presentCount'] }} Present | ✗ {{ $day['absentCount'] }} Absent
-                        </span>
-                    </h5>
-                </div>
+                <a href="{{ route('admin.entry-days.show', ['date' => $day['date']]) }}"
+                    style="text-decoration: none; color: inherit;">
+                    <div class="card-header bg-primary text-white" style="cursor: pointer;">
+                        <h5 class="mb-0">
+                            📅 {{ \Carbon\Carbon::parse($day['date'])->format('D, M d, Y') }}
+                            <span class="badge bg-light text-primary ms-2">
+                                ✓ {{ $day['presentCount'] }} Present | ✗ {{ $day['absentCount'] }} Absent
+                            </span>
+                        </h5>
+                    </div>
+                </a>
                 <div class="card-body">
                     <div class="row">
                         <!-- Present Sellers -->
