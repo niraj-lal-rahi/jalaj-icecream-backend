@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\LogViewerController;
 use App\Http\Controllers\Admin\RedFlagController;
 use App\Http\Controllers\Admin\EntryDayController;
 use App\Http\Controllers\Admin\SellerPerformanceController;
@@ -89,6 +90,22 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
         ->name('whatsapp.send-message');
     Route::post('whatsapp/send-message', [WhatsAppMessageController::class, 'send'])
         ->name('whatsapp.send');
+
+    // Log Viewer Routes
+    Route::get('logs', [LogViewerController::class, 'index'])
+        ->name('logs.index');
+    Route::get('logs/{filename}', [LogViewerController::class, 'show'])
+        ->name('logs.show');
+    Route::get('logs/{filename}/download', [LogViewerController::class, 'downloadFile'])
+        ->name('logs.download');
+    Route::delete('logs/{filename}/clear', [LogViewerController::class, 'clearLog'])
+        ->name('logs.clear');
+    Route::get('files/{path}/view', [LogViewerController::class, 'viewFile'])
+        ->where('path', '.*')
+        ->name('logs.view-file');
+    Route::get('files/{path}/download', [LogViewerController::class, 'downloadFile'])
+        ->where('path', '.*')
+        ->name('logs.download-file');
 
     // Resource routes
     Route::resource('sales', SaleController::class);

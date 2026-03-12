@@ -61,6 +61,12 @@
                         💾 Database Dumps
                     </a>
                 </li>
+                <li class="nav-item mb-2">
+                    <a href="{{ route('admin.logs.index') }}"
+                        class="nav-link text-white {{ request()->routeIs('admin.logs.*') ? 'active bg-primary rounded' : '' }}">
+                        📋 System Logs
+                    </a>
+                </li>
                 <li class="nav-item mt-4">
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf

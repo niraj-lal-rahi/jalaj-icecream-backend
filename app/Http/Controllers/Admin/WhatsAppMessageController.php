@@ -25,7 +25,12 @@ class WhatsAppMessageController extends Controller
     }
 
     /**
-     * Send a WhatsApp text message with optional file attachment
+     * Send a WhatsApp message using template-first strategy:
+     * 1. Send pre-approved template to establish conversation (better delivery)
+     * 2. Wait 2 seconds for delivery
+     * 3. Send the actual message (text or text + attachment)
+     *
+     * This ensures your message is delivered by WhatsApp.
      */
     public function send(Request $request)
     {
@@ -62,6 +67,41 @@ class WhatsAppMessageController extends Controller
             // Format phone number to +91XXXXXXXXXX
             $phoneNumber = $this->formatPhoneNumber($validated['phone_number']);
 
+            // ============================================================================
+            // STEP 1: Send template message first to establish conversation
+            // ============================================================================
+            Log::info('WhatsApp: Step 1 - Sending template to establish conversation', [
+                'phone' => $phoneNumber,
+                'admin_id' => auth()->id()
+            ]);
+
+            $templateSuccess = $this->whatsAppService->sendTemplateMessage(
+                $phoneNumber,
+                'hello_world'
+            );
+
+            if (!$templateSuccess) {
+                Log::error('WhatsApp: Failed to send template message', [
+                    'phone' => $phoneNumber,
+                    'admin_id' => auth()->id()
+                ]);
+
+                return redirect()
+                    ->route('admin.whatsapp.send-message')
+                    ->withInput()
+                    ->with('error', 'Failed to establish conversation. Please try again.');
+            }
+
+            // Wait 10 seconds for template to fully deliver and activate conversation
+            // This ensures WhatsApp recognizes the conversation as active on the recipient's device
+            // before we send the custom message
+            Log::debug('WhatsApp: Waiting 10 seconds for template delivery to activate conversation...');
+            sleep(10);
+
+            // ============================================================================
+            // STEP 2: Send the actual message (text or text + attachment)
+            // ============================================================================
+
             // Check if file attachment is provided
             if ($request->hasFile('attachment') && $request->file('attachment')->isValid()) {
                 $file = $request->file('attachment');
@@ -69,6 +109,12 @@ class WhatsAppMessageController extends Controller
                 // Normalize path separators for Windows compatibility
                 $absolutePath = storage_path('app' . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $filePath));
                 $fileName = $file->getClientOriginalName();
+
+                Log::info('WhatsApp: Step 2 - Sending text + attachment', [
+                    'phone' => $phoneNumber,
+                    'file_name' => $fileName,
+                    'admin_id' => auth()->id()
+                ]);
 
                 // Send text message + attachment
                 $success = $this->whatsAppService->sendTextWithAttachment(
@@ -89,52 +135,58 @@ class WhatsAppMessageController extends Controller
                     'message_length' => strlen($validated['message']),
                     'file_name' => $fileName,
                     'file_size' => $file->getSize(),
-                    'admin_id' => auth()->id()
+                    'admin_id' => auth()->id(),
+                    'strategy' => 'template_first'
                 ];
 
                 if ($success) {
-                    Log::info('WhatsApp message with attachment sent successfully', $logContext);
+                    Log::info('WhatsApp: Template + Message + Attachment sent successfully', $logContext);
                     return redirect()
                         ->route('admin.whatsapp.send-message')
-                        ->with('success', "✅ Message and attachment sent successfully to $phoneNumber!");
+                        ->with('success', "✅ Message and attachment sent successfully to $phoneNumber! (Template established conversation)");
                 } else {
-                    Log::error('WhatsApp message with attachment failed to send', $logContext);
+                    Log::error('WhatsApp: Failed to send message/attachment after template', $logContext);
                     return redirect()
                         ->route('admin.whatsapp.send-message')
                         ->withInput()
-                        ->with('error', 'Failed to send message with attachment. Please try again.');
+                        ->with('error', 'Template sent but failed to send message with attachment. Please try again.');
                 }
             } else {
                 // Send text message only (no attachment)
+                Log::info('WhatsApp: Step 2 - Sending text message', [
+                    'phone' => $phoneNumber,
+                    'admin_id' => auth()->id()
+                ]);
+
                 $success = $this->whatsAppService->sendTextMessage(
                     $phoneNumber,
                     $validated['message']
                 );
 
+                $logContext = [
+                    'phone' => $phoneNumber,
+                    'message_length' => strlen($validated['message']),
+                    'admin_id' => auth()->id(),
+                    'strategy' => 'template_first'
+                ];
+
                 if ($success) {
-                    Log::info('WhatsApp message sent successfully', [
-                        'phone' => $phoneNumber,
-                        'message_length' => strlen($validated['message']),
-                        'admin_id' => auth()->id()
-                    ]);
+                    Log::info('WhatsApp: Template + Text Message sent successfully', $logContext);
 
                     return redirect()
                         ->route('admin.whatsapp.send-message')
-                        ->with('success', 'WhatsApp message sent successfully to ' . $phoneNumber);
+                        ->with('success', '✅ Message sent successfully to ' . $phoneNumber . '! (Template established conversation)');
                 } else {
-                    Log::error('WhatsApp message failed to send', [
-                        'phone' => $phoneNumber,
-                        'admin_id' => auth()->id()
-                    ]);
+                    Log::error('WhatsApp: Failed to send text message after template', $logContext);
 
                     return redirect()
                         ->route('admin.whatsapp.send-message')
                         ->withInput()
-                        ->with('error', 'Failed to send message. Please check the phone number and try again.');
+                        ->with('error', 'Template sent but message delivery failed. Please try again.');
                 }
             }
         } catch (\Exception $e) {
-            Log::error('WhatsApp message exception', [
+            Log::error('WhatsApp: Exception during multi-step send', [
                 'exception' => $e->getMessage(),
                 'admin_id' => auth()->id()
             ]);
@@ -142,7 +194,7 @@ class WhatsAppMessageController extends Controller
             return redirect()
                 ->route('admin.whatsapp.send-message')
                 ->withInput()
-                ->with('error', 'An error occurred while sending the message: ' . $e->getMessage());
+                ->with('error', 'An error occurred: ' . $e->getMessage());
         }
     }
 
