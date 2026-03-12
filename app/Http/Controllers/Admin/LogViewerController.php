@@ -28,16 +28,16 @@ class LogViewerController extends Controller
     {
         try {
             $logFiles = $this->storageHelper->getLogFiles();
-            $storageFiles = $this->storageHelper->getStorageFiles();
+            $storageItems = $this->storageHelper->getStorageItems();
 
             return view('admin.logs.index', [
                 'logFiles' => $logFiles,
-                'storageFiles' => $storageFiles,
+                'storageItems' => $storageItems,
             ]);
         } catch (\Exception $e) {
             return view('admin.logs.index', [
                 'logFiles' => [],
-                'storageFiles' => [],
+                'storageItems' => ['files' => [], 'directories' => []],
                 'error' => 'Failed to load logs: ' . $e->getMessage(),
             ]);
         }

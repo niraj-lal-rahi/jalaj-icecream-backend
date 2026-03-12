@@ -124,64 +124,116 @@
             </div>
         </div>
 
-        <!-- Storage Files Section -->
+        <!-- Storage Files & Folders Section -->
         <div class="card">
             <div class="card-header bg-secondary text-white">
-                <h5 class="mb-0">📁 Storage Files (storage/)</h5>
+                <h5 class="mb-0">📁 Storage Files & Folders (storage/)</h5>
+                <small>Excluding: app, framework, logs</small>
             </div>
             <div class="card-body">
-                @if (empty($storageFiles))
+                @if (empty($storageItems['directories']) && empty($storageItems['files']))
                     <div class="alert alert-info mb-0">
-                        No files found in storage directory.
+                        No files or folders found in storage directory.
                     </div>
                 @else
-                    <div class="table-responsive">
-                        <table class="table table-striped table-hover mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Path</th>
-                                    <th>Type</th>
-                                    <th>Size</th>
-                                    <th>Modified</th>
-                                    <th style="width: 200px;">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($storageFiles as $file)
-                                    <tr>
-                                        <td>
-                                            <code>{{ $file['path'] }}</code>
-                                        </td>
-                                        <td>
-                                            <span class="badge bg-secondary">
-                                                {{ strtoupper($file['extension'] ?: 'FILE') }}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <span class="badge bg-info">{{ $file['size_formatted'] }}</span>
-                                        </td>
-                                        <td>
-                                            <small class="text-muted" title="{{ $file['modified_date'] }}">
-                                                {{ \Carbon\Carbon::createFromTimestamp($file['modified'])->diffForHumans() }}
-                                            </small>
-                                        </td>
-                                        <td>
-                                            @if (in_array(strtolower($file['extension']), ['txt', 'log', 'csv', 'json', 'xml', 'md', 'php', 'html']))
-                                                <a href="{{ route('admin.logs.view-file', ['path' => $file['path']]) }}"
-                                                    class="btn btn-sm btn-info" title="View">
-                                                    👁️ View
-                                                </a>
-                                            @endif
-                                            <a href="{{ route('admin.logs.download-file', ['path' => $file['path']]) }}"
-                                                class="btn btn-sm btn-success" title="Download">
-                                                ⬇️ Download
-                                            </a>
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
+                    <!-- Directories Section -->
+                    @if (!empty($storageItems['directories']))
+                        <div class="mb-4">
+                            <h6 class="mb-3">📂 Directories</h6>
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Folder Name</th>
+                                            <th>Items</th>
+                                            <th>Modified</th>
+                                            <th style="width: 150px;">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach ($storageItems['directories'] as $dir)
+                                            <tr>
+                                                <td>
+                                                    <strong>📂 {{ $dir['name'] }}</strong>
+                                                    <br>
+                                                    <small class="text-muted"><code>{{ $dir['path'] }}</code></small>
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-secondary">{{ $dir['file_count'] }}
+                                                        item{{ $dir['file_count'] !== 1 ? 's' : '' }}</span>
+                                                </td>
+                                                <td>
+                                                    <small class="text-muted" title="{{ $dir['modified_date'] }}">
+                                                        {{ \Carbon\Carbon::createFromTimestamp($dir['modified'])->diffForHumans() }}
+                                                    </small>
+                                                </td>
+                                                <td>
+                                                    <a href="{{ route('admin.logs.view-file', ['path' => $dir['path']]) }}"
+                                                        class="btn btn-sm btn-info" title="Browse">
+                                                        📂 Open
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    @endif
+
+                    <!-- Files Section -->
+                    @if (!empty($storageItems['files']))
+                        <div>
+                            <h6 class="mb-3">📄 Files</h6>
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Filename</th>
+                                            <th>Type</th>
+                                            <th>Size</th>
+                                            <th>Modified</th>
+                                            <th style="width: 200px;">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach ($storageItems['files'] as $file)
+                                            <tr>
+                                                <td>
+                                                    <code>{{ $file['name'] }}</code>
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-primary">
+                                                        {{ strtoupper($file['extension'] ?: 'FILE') }}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-info">{{ $file['size_formatted'] }}</span>
+                                                </td>
+                                                <td>
+                                                    <small class="text-muted" title="{{ $file['modified_date'] }}">
+                                                        {{ \Carbon\Carbon::createFromTimestamp($file['modified'])->diffForHumans() }}
+                                                    </small>
+                                                </td>
+                                                <td>
+                                                    @if (in_array(strtolower($file['extension']), ['txt', 'log', 'csv', 'json', 'xml', 'md', 'php', 'html']))
+                                                        <a href="{{ route('admin.logs.view-file', ['path' => $file['path']]) }}"
+                                                            class="btn btn-sm btn-info" title="View">
+                                                            👁️ View
+                                                        </a>
+                                                    @endif
+                                                    <a href="{{ route('admin.logs.download-file', ['path' => $file['path']]) }}"
+                                                        class="btn btn-sm btn-success" title="Download">
+                                                        ⬇️ Download
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    @endif
                 @endif
             </div>
         </div>

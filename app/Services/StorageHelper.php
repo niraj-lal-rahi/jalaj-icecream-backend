@@ -72,6 +72,86 @@ class StorageHelper
     }
 
     /**
+     * Get all files and directories from storage (excluding specific folders)
+     * Excludes: app, framework, logs
+     *
+     * @param string $directory Subdirectory of storage/ (e.g., 'reports')
+     * @return array Array with 'files' and 'directories' keys
+     */
+    public function getStorageItems(string $directory = ''): array
+    {
+        $baseDir = $this->basePath;
+        if (!empty($directory)) {
+            $baseDir = $baseDir . DIRECTORY_SEPARATOR . trim($directory, DIRECTORY_SEPARATOR);
+        }
+
+        // Security check: ensure path is within storage directory
+        if (!$this->isPathSafe($baseDir)) {
+            return ['files' => [], 'directories' => []];
+        }
+
+        $files = [];
+        $directories = [];
+        $excludeDirs = ['app', 'framework', 'logs', '.', '..'];
+
+        if (!is_dir($baseDir)) {
+            return ['files' => [], 'directories' => []];
+        }
+
+        $contents = scandir($baseDir);
+
+        foreach ($contents as $item) {
+            if (in_array($item, $excludeDirs)) {
+                continue;
+            }
+
+            $fullPath = $baseDir . DIRECTORY_SEPARATOR . $item;
+
+            if (is_dir($fullPath)) {
+                // It's a directory
+                $relativePath = str_replace($this->basePath . DIRECTORY_SEPARATOR, '', $fullPath);
+                $directories[] = [
+                    'name' => $item,
+                    'path' => $relativePath,
+                    'full_path' => $fullPath,
+                    'modified' => filemtime($fullPath),
+                    'modified_date' => date('Y-m-d H:i:s', filemtime($fullPath)),
+                    'type' => 'directory',
+                    'file_count' => count(array_diff(scandir($fullPath), ['.', '..'])),
+                ];
+            } elseif (is_file($fullPath)) {
+                // It's a file
+                $relativePath = str_replace($this->basePath . DIRECTORY_SEPARATOR, '', $fullPath);
+                $files[] = [
+                    'name' => $item,
+                    'path' => $relativePath,
+                    'full_path' => $fullPath,
+                    'size' => filesize($fullPath),
+                    'size_formatted' => $this->formatBytes(filesize($fullPath)),
+                    'modified' => filemtime($fullPath),
+                    'modified_date' => date('Y-m-d H:i:s', filemtime($fullPath)),
+                    'extension' => pathinfo($item, PATHINFO_EXTENSION),
+                    'type' => 'file',
+                ];
+            }
+        }
+
+        // Sort both by modified date (newest first)
+        usort($files, function ($a, $b) {
+            return $b['modified'] - $a['modified'];
+        });
+
+        usort($directories, function ($a, $b) {
+            return $b['modified'] - $a['modified'];
+        });
+
+        return [
+            'files' => $files,
+            'directories' => $directories,
+        ];
+    }
+
+    /**
      * Get all files from a storage subdirectory (recursively)
      *
      * @param string $directory Subdirectory of storage/ (e.g., 'app', 'reports')
