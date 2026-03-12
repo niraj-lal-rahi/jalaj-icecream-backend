@@ -31,7 +31,8 @@
                     </div>
 
                     <div class="card-body">
-                        <form method="POST" action="{{ route('admin.whatsapp.send') }}" id="messageForm">
+                        <form method="POST" action="{{ route('admin.whatsapp.send') }}" id="messageForm"
+                            enctype="multipart/form-data">
                             @csrf
 
                             <!-- Phone Number Input -->
@@ -91,6 +92,36 @@
                                 </small>
                             </div>
 
+                            <!-- File Attachment (Optional) -->
+                            <div class="mb-4">
+                                <label for="attachment" class="form-label">
+                                    <span class="fw-bold">📎 Attachment</span>
+                                    <span class="badge bg-secondary">Optional</span>
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light">
+                                        <i class="bi bi-paperclip"></i>
+                                    </span>
+                                    <input type="file" class="form-control @error('attachment') is-invalid @enderror"
+                                        id="attachment" name="attachment"
+                                        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png,.gif,.mp4,.mp3,.ogg">
+                                </div>
+                                @error('attachment')
+                                    <div class="invalid-feedback d-block">
+                                        <i class="bi bi-exclamation-triangle"></i> {{ $message }}
+                                    </div>
+                                @enderror
+                                <small class="text-muted d-block mt-2">
+                                    <i class="bi bi-info-circle"></i>
+                                    Supported: PDF, Images (JPG, PNG), Videos (MP4), Audio (MP3), Documents (DOC, XLS, CSV)
+                                    | Max: 16MB
+                                </small>
+                                <small class="text-info d-block mt-2">
+                                    <i class="bi bi-lightbulb"></i>
+                                    The message will be sent first, followed by the attachment after a brief delay.
+                                </small>
+                            </div>
+
                             <!-- Form Actions -->
                             <div class="d-flex gap-2">
                                 <button type="submit" class="btn btn-primary btn-lg">
@@ -132,6 +163,17 @@
                             <li><i class="bi bi-check-circle text-success"></i> Use line breaks for readability</li>
                             <li><i class="bi bi-check-circle text-success"></i> Maximum 4096 characters</li>
                             <li><i class="bi bi-check-circle text-success"></i> Messages are logged for audit</li>
+                        </ul>
+
+                        <hr class="my-3">
+
+                        <h6 class="fw-bold mb-3">📎 File Attachment (NEW!)</h6>
+                        <ul class="list-unstyled small text-muted">
+                            <li><i class="bi bi-check-circle text-success"></i> Attach documents, images, or videos</li>
+                            <li><i class="bi bi-check-circle text-success"></i> Maximum file size: 16MB</li>
+                            <li><i class="bi bi-check-circle text-success"></i> Supported formats: PDF, DOC, XLS, JPG, PNG,
+                                MP4, MP3</li>
+                            <li><i class="bi bi-check-circle text-success"></i> File is sent after the message text</li>
                         </ul>
 
                         <hr class="my-3">

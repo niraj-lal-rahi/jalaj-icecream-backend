@@ -195,9 +195,25 @@
                                 value="{{ date('Y-m-d') }}" required>
                             <small class="text-muted">Choose the date for the sales report</small>
                         </div>
+
+                        <div class="mb-3">
+                            <label for="cover_message" class="form-label">
+                                📝 Cover Message
+                                <span class="badge bg-secondary">Optional</span>
+                            </label>
+                            <textarea name="cover_message" id="cover_message" class="form-control" rows="4"
+                                placeholder="Add a message to send before the report (e.g., 'Hi, please find the sales report for today attached below.')"
+                                maxlength="4096">{{ old('cover_message') }}</textarea>
+                            <small class="text-muted d-block mt-2">
+                                <i class="bi bi-info-circle"></i>
+                                If provided, this message will be sent first, followed by the CSV report.
+                                Maximum 4096 characters.
+                            </small>
+                        </div>
+
                         <div class="alert alert-info" role="alert">
                             <i class="bi bi-info-circle"></i>
-                            This will send CSV report to admin WhatsApp number:
+                            Report will be sent to admin WhatsApp number:
                             <strong>{{ config('whatsapp.admin_phone_number') }}</strong>
                         </div>
                     </div>

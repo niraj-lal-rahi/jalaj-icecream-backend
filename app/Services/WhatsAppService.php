@@ -77,6 +77,13 @@ class WhatsAppService
                 $payload['document']['caption'] = $caption;
             }
 
+            // Log the request for debugging
+            Log::debug('WhatsApp: Sending document message', [
+                'url' => $url,
+                'payload' => $payload,
+                'phone_number_id' => $this->phoneNumberId,
+            ]);
+
             $response = Http::withToken($this->apiToken)
                 ->post($url, $payload);
 
@@ -85,6 +92,8 @@ class WhatsAppService
                     'to' => $toPhoneNumber,
                     'file' => $fileName,
                     'message_id' => $response->json('messages.0.id'),
+                    'status_code' => $response->status(),
+                    'response_body' => $response->json(),
                 ]);
                 return true;
             }
@@ -179,18 +188,31 @@ class WhatsAppService
 
             $url = "{$this->baseUrl}/{$this->apiVersion}/{$this->phoneNumberId}/messages";
 
+            $payload = [
+                'messaging_product' => 'whatsapp',
+                'recipient_type' => 'individual',
+                'to' => str_replace('+', '', $toPhoneNumber),
+                'type' => 'text',
+                'text' => ['body' => $message],
+            ];
+
+            // Log the request for debugging
+            Log::debug('WhatsApp: Sending text message', [
+                'url' => $url,
+                'payload' => $payload,
+                'phone_number_id' => $this->phoneNumberId,
+            ]);
+
             $response = Http::withToken($this->apiToken)
-                ->post($url, [
-                    'messaging_product' => 'whatsapp',
-                    'recipient_type' => 'individual',
-                    'to' => str_replace('+', '', $toPhoneNumber),
-                    'type' => 'text',
-                    'text' => ['body' => $message],
-                ]);
+                ->post($url, $payload);
 
             if ($response->successful()) {
-                Log::info('WhatsApp: Text message sent', [
+                Log::info('WhatsApp: Text message sent successfully', [
                     'to' => $toPhoneNumber,
+                    'message_length' => strlen($message),
+                    'message_id' => $response->json('messages.0.id'),
+                    'status_code' => $response->status(),
+                    'response_body' => $response->json(),
                 ]);
                 return true;
             }
@@ -205,6 +227,171 @@ class WhatsAppService
             Log::error('WhatsApp: Exception while sending text', [
                 'exception' => $e->getMessage(),
                 'phone' => $toPhoneNumber,
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * Send a pre-approved template message (RECOMMENDED - best delivery rate)
+     *
+     * @param string $toPhoneNumber Phone number in format: +919876543210
+     * @param string $templateName Template name (e.g., 'hello_world')
+     * @param array $parameters Optional template parameters
+     * @param string $languageCode Language code (default: en_US)
+     * @return bool
+     */
+    public function sendTemplateMessage(
+        string $toPhoneNumber,
+        string $templateName = 'hello_world',
+        array $parameters = [],
+        string $languageCode = 'en_US'
+    ): bool {
+        try {
+            // Test mode: skip actual API calls
+            if ($this->testMode) {
+                Log::info('WhatsApp (TEST MODE): Template message would be sent', [
+                    'to' => $toPhoneNumber,
+                    'template' => $templateName,
+                    'language' => $languageCode,
+                ]);
+                return true;
+            }
+
+            $url = "{$this->baseUrl}/{$this->apiVersion}/{$this->phoneNumberId}/messages";
+
+            $payload = [
+                'messaging_product' => 'whatsapp',
+                'recipient_type' => 'individual',
+                'to' => str_replace('+', '', $toPhoneNumber),
+                'type' => 'template',
+                'template' => [
+                    'name' => $templateName,
+                    'language' => [
+                        'code' => $languageCode,
+                    ],
+                ],
+            ];
+
+            // Add parameters if provided
+            if (!empty($parameters)) {
+                $payload['template']['components'] = [
+                    [
+                        'type' => 'body',
+                        'parameters' => array_map(function ($param) {
+                            return ['type' => 'text', 'text' => $param];
+                        }, $parameters),
+                    ],
+                ];
+            }
+
+            // Log the request for debugging
+            Log::debug('WhatsApp: Sending template message', [
+                'url' => $url,
+                'payload' => $payload,
+                'phone_number_id' => $this->phoneNumberId,
+            ]);
+
+            $response = Http::withToken($this->apiToken)
+                ->post($url, $payload);
+
+            if ($response->successful()) {
+                Log::info('WhatsApp: Template message sent successfully', [
+                    'to' => $toPhoneNumber,
+                    'template' => $templateName,
+                    'message_id' => $response->json('messages.0.id'),
+                    'status_code' => $response->status(),
+                    'response_body' => $response->json(),
+                ]);
+                return true;
+            }
+
+            Log::error('WhatsApp: Failed to send template message', [
+                'to' => $toPhoneNumber,
+                'template' => $templateName,
+                'response' => $response->json(),
+            ]);
+
+            return false;
+        } catch (\Exception $e) {
+            Log::error('WhatsApp: Exception while sending template', [
+                'exception' => $e->getMessage(),
+                'phone' => $toPhoneNumber,
+                'template' => $templateName,
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * Send a text message followed by a document attachment
+     * (Sends two separate messages: text first, then document)
+     *
+     * @param string $toPhoneNumber Phone number in format: +919876543210
+     * @param string $message Main message text
+     * @param string $filePath Local file path to send as attachment
+     * @param string $fileName Display name of the file
+     * @param string $caption Optional caption for the attachment
+     * @return bool True if both messages sent, false if any failed
+     */
+    public function sendTextWithAttachment(
+        string $toPhoneNumber,
+        string $message,
+        string $filePath,
+        string $fileName,
+        string $caption = ''
+    ): bool {
+        try {
+            if ($this->testMode) {
+                Log::info('WhatsApp (TEST MODE): Text + attachment would be sent', [
+                    'to' => $toPhoneNumber,
+                    'message' => $message,
+                    'file' => $fileName,
+                    'caption' => $caption,
+                ]);
+                return true;
+            }
+
+            // Step 1: Send the text message first
+            $textSuccess = $this->sendTextMessage($toPhoneNumber, $message);
+            if (!$textSuccess) {
+                Log::error('WhatsApp: Failed to send text message (Step 1)', [
+                    'to' => $toPhoneNumber,
+                ]);
+                return false;
+            }
+
+            // Small delay to ensure message order
+            usleep(500000); // 0.5 second delay
+
+            // Step 2: Send the document attachment
+            $documentSuccess = $this->sendDocumentMessage(
+                $toPhoneNumber,
+                $filePath,
+                $fileName,
+                $caption
+            );
+
+            if (!$documentSuccess) {
+                Log::error('WhatsApp: Text sent but document failed (Step 2)', [
+                    'to' => $toPhoneNumber,
+                    'file' => $fileName,
+                ]);
+                return false;
+            }
+
+            Log::info('WhatsApp: Text + attachment sent successfully', [
+                'to' => $toPhoneNumber,
+                'message_length' => strlen($message),
+                'file' => $fileName,
+            ]);
+
+            return true;
+        } catch (\Exception $e) {
+            Log::error('WhatsApp: Exception while sending text with attachment', [
+                'exception' => $e->getMessage(),
+                'phone' => $toPhoneNumber,
+                'file' => $fileName,
             ]);
             return false;
         }

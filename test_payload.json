@@ -1,0 +1,8 @@
+{
+    "messaging_product": "whatsapp",
+    "to": "917499282145",
+    "type": "text",
+    "text": {
+        "body": "Test message from curl"
+    }
+}

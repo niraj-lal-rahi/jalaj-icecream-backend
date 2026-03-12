@@ -311,16 +311,22 @@ class SaleController extends Controller
     }
 
     /**
-     * Send sales report manually via WhatsApp
+     * Send sales report manually via WhatsApp with optional cover message
      */
     public function sendManualReport(Request $request)
     {
         try {
-            $request->validate([
+            $validated = $request->validate([
                 'date' => 'required|date',
+                'cover_message' => 'nullable|string|max:4096',
+            ], [
+                'date.required' => 'Date is required.',
+                'date.date' => 'Please provide a valid date.',
+                'cover_message.max' => 'Cover message cannot exceed 4096 characters.',
             ]);
 
-            $date = $request->input('date');
+            $date = $validated['date'];
+            $coverMessage = $validated['cover_message'] ?? null;
             $exporter = app('App\Services\SalesReportExporter');
             $whatsApp = app('App\Services\WhatsAppService');
 
@@ -330,24 +336,49 @@ class SaleController extends Controller
 
             // Send to admin
             $adminPhone = config('whatsapp.admin_phone_number');
-            $caption = "📊 Sales Report for {$date}";
+            $reportCaption = "📊 Sales Report for {$date}";
 
-            $sent = $whatsApp->sendDocumentMessage(
-                $adminPhone,
-                $filePath,
-                $fileName,
-                $caption
-            );
+            // If cover message provided, send text + attachment; otherwise send document only
+            if (!empty($coverMessage)) {
+                $sent = $whatsApp->sendTextWithAttachment(
+                    $adminPhone,
+                    $coverMessage,
+                    $filePath,
+                    $fileName,
+                    $reportCaption
+                );
+
+                $logMessage = "Sales report with cover message for {$date}";
+            } else {
+                $sent = $whatsApp->sendDocumentMessage(
+                    $adminPhone,
+                    $filePath,
+                    $fileName,
+                    $reportCaption
+                );
+
+                $logMessage = "Sales report for {$date}";
+            }
 
             if ($sent) {
-                return redirect()->back()->with('success', "✅ Sales report for {$date} sent successfully to WhatsApp!");
+                \Log::info("Manual report sent: {$logMessage}", [
+                    'date' => $date,
+                    'cover_message' => !empty($coverMessage),
+                    'admin_id' => auth()->id(),
+                ]);
+                return redirect()->back()->with('success', "✅ {$logMessage} sent successfully to WhatsApp!");
             } else {
+                \Log::error("Manual report failed: {$logMessage}", [
+                    'date' => $date,
+                    'admin_id' => auth()->id(),
+                ]);
                 return redirect()->back()->with('error', 'Failed to send report. Please check logs.');
             }
         } catch (\Exception $e) {
             \Log::error('Manual report sending failed', [
                 'exception' => $e->getMessage(),
                 'date' => $request->input('date'),
+                'admin_id' => auth()->id(),
             ]);
             return redirect()->back()->with('error', 'Error: ' . $e->getMessage());
         }
