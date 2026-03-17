@@ -22,7 +22,7 @@ class SellerController extends Controller
         try {
             $sellers = Seller::with('documents')
                 ->orderBy('name')
-                ->paginate(20);
+                ->paginate(100);
 
             return $this->successPaginated($sellers->items(), 'Sellers retrieved successfully', [
                 'total' => $sellers->total(),
