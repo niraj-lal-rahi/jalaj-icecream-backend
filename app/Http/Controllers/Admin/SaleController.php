@@ -335,9 +335,9 @@ class SaleController extends Controller
             $whatsApp = app('App\Services\WhatsAppService');
             $email = app('App\Services\EmailService');
 
-            // Generate CSV file and summary
-            $filePath = $exporter->exportToFile($date);
-            $fileName = "sales_report_{$date}.csv";
+            // Generate XLSX file and summary
+            $filePath = $exporter->exportToXlsxFile($date);
+            $fileName = "sales_report_{$date}.xlsx";
             $summary = $exporter->generateSummary($date);
 
             $whatsappSent = false;

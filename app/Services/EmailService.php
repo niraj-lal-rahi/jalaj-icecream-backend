@@ -8,10 +8,10 @@ use Illuminate\Support\Facades\Log;
 class EmailService
 {
     /**
-     * Send sales report via email with attachment
+     * Send sales report via email with XLSX attachment
      *
      * @param string $recipientEmail Email address to send to
-     * @param string $filePath Path to the file to attach
+     * @param string $filePath Path to the XLSX file to attach
      * @param string $fileName Name of the file for attachment
      * @param string $subject Email subject
      * @param string|null $bodyText Email body text
@@ -35,7 +35,7 @@ class EmailService
                     ->subject($subject)
                     ->attach($filePath, [
                         'as' => $fileName,
-                        'mime' => 'text/csv',
+                        'mime' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                     ]);
             });
 

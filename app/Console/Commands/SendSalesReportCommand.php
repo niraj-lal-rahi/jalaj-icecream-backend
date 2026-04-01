@@ -43,14 +43,14 @@ class SendSalesReportCommand extends Command
 
             $this->info("Generating sales report for {$date}...");
 
-            // Generate CSV file
-            $filePath = $exporter->exportToFile($date);
-            $fileName = "sales_report_{$date}.csv";
+            // Generate XLSX file
+            $filePath = $exporter->exportToXlsxFile($date);
+            $fileName = "sales_report_{$date}.xlsx";
 
             // Generate summary text
             $summary = $exporter->generateSummary($date);
 
-            $this->info("CSV file created: {$filePath}");
+            $this->info("XLSX file created: {$filePath}");
 
             $whatsappSent = false;
             $emailSent = false;
