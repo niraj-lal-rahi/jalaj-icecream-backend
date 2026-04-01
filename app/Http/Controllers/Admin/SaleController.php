@@ -311,7 +311,7 @@ class SaleController extends Controller
     }
 
     /**
-     * Send sales report manually via WhatsApp with optional cover message
+     * Send sales report manually via WhatsApp or Email with optional cover message
      */
     public function sendManualReport(Request $request)
     {
@@ -319,57 +319,101 @@ class SaleController extends Controller
             $validated = $request->validate([
                 'date' => 'required|date',
                 'cover_message' => 'nullable|string|max:4096',
+                'via' => 'nullable|in:whatsapp,email,both',
             ], [
                 'date.required' => 'Date is required.',
                 'date.date' => 'Please provide a valid date.',
                 'cover_message.max' => 'Cover message cannot exceed 4096 characters.',
+                'via.in' => 'Send via must be whatsapp, email, or both.',
             ]);
 
             $date = $validated['date'];
             $coverMessage = $validated['cover_message'] ?? null;
+            $via = $validated['via'] ?? 'whatsapp';
+
             $exporter = app('App\Services\SalesReportExporter');
             $whatsApp = app('App\Services\WhatsAppService');
+            $email = app('App\Services\EmailService');
 
-            // Generate CSV file
+            // Generate CSV file and summary
             $filePath = $exporter->exportToFile($date);
             $fileName = "sales_report_{$date}.csv";
+            $summary = $exporter->generateSummary($date);
 
-            // Send to admin
-            $adminPhone = config('whatsapp.admin_phone_number');
-            $reportCaption = "📊 Sales Report for {$date}";
+            $whatsappSent = false;
+            $emailSent = false;
 
-            // If cover message provided, send text + attachment; otherwise send document only
-            if (!empty($coverMessage)) {
-                $sent = $whatsApp->sendTextWithAttachment(
-                    $adminPhone,
-                    $coverMessage,
-                    $filePath,
-                    $fileName,
-                    $reportCaption
-                );
+            // Send via WhatsApp if requested
+            if (in_array($via, ['whatsapp', 'both'])) {
+                $adminPhone = config('whatsapp.admin_phone_number');
+                $reportCaption = "📊 Sales Report for {$date}";
 
-                $logMessage = "Sales report with cover message for {$date}";
-            } else {
-                $sent = $whatsApp->sendDocumentMessage(
-                    $adminPhone,
-                    $filePath,
-                    $fileName,
-                    $reportCaption
-                );
-
-                $logMessage = "Sales report for {$date}";
+                if (!empty($coverMessage)) {
+                    $whatsappSent = $whatsApp->sendTextWithAttachment(
+                        $adminPhone,
+                        $coverMessage,
+                        $filePath,
+                        $fileName,
+                        $reportCaption
+                    );
+                } else {
+                    $whatsappSent = $whatsApp->sendDocumentMessage(
+                        $adminPhone,
+                        $filePath,
+                        $fileName,
+                        $reportCaption
+                    );
+                }
             }
 
-            if ($sent) {
-                \Log::info("Manual report sent: {$logMessage}", [
+            // Send via Email if requested
+            if (in_array($via, ['email', 'both'])) {
+                $adminEmail = config('mail.from.address') ?? config('app.email_admin');
+                $emailSubject = "📊 Sales Report for {$date}";
+                $emailBody = !empty($coverMessage) ? $coverMessage . "\n\n" . $summary : $summary;
+
+                $emailSent = $email->sendSalesReport(
+                    $adminEmail,
+                    $filePath,
+                    $fileName,
+                    $emailSubject,
+                    $emailBody
+                );
+            }
+
+            // Determine success/failure
+            $success = false;
+            $message = '';
+
+            if ($via === 'both') {
+                $success = ($whatsappSent || $emailSent);
+                $message = "Report sent via ";
+                if ($whatsappSent) $message .= "WhatsApp ";
+                if ($whatsappSent && $emailSent) $message .= "and ";
+                if ($emailSent) $message .= "Email";
+            } elseif ($via === 'whatsapp') {
+                $success = $whatsappSent;
+                $message = "Report sent via WhatsApp";
+            } elseif ($via === 'email') {
+                $success = $emailSent;
+                $message = "Report sent via Email";
+            }
+
+            if ($success) {
+                \Log::info("Manual report sent successfully", [
                     'date' => $date,
-                    'cover_message' => !empty($coverMessage),
+                    'via' => $via,
+                    'whatsapp_sent' => $whatsappSent,
+                    'email_sent' => $emailSent,
                     'admin_id' => auth()->id(),
                 ]);
-                return redirect()->back()->with('success', "✅ {$logMessage} sent successfully to WhatsApp!");
+                return redirect()->back()->with('success', "✅ {$message}!");
             } else {
-                \Log::error("Manual report failed: {$logMessage}", [
+                \Log::error("Manual report sending failed", [
                     'date' => $date,
+                    'via' => $via,
+                    'whatsapp_sent' => $whatsappSent,
+                    'email_sent' => $emailSent,
                     'admin_id' => auth()->id(),
                 ]);
                 return redirect()->back()->with('error', 'Failed to send report. Please check logs.');

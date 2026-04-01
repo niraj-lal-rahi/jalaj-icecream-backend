@@ -10,29 +10,35 @@ use Carbon\Carbon;
  * SalesReportExporter
  *
  * Generates and exports sales reports in multiple formats (CSV, Summary text).
+ * Reports are formatted to match the yearly sales report structure.
  *
  * Key Responsibilities:
  * - Generate CSV sales reports for a specific date
  * - Generate text summary reports for a specific date
  * - Export reports to file storage
- * - Format sales data including profit calculations
+ * - Format sales data with item prices and profit calculations (40% salary, 60% share)
+ *
+ * Report Format (matches annual Excel export):
+ * - Lists each sale with item name including price in parentheses
+ * - Calculates net quantity (Pick - Returned) × Price
+ * - Groups sales by seller with totals
+ * - Shows Salary (40%) and Share (60%) for each seller
+ * - Includes grand total row with overall calculations
  *
  * Architecture:
  * - Uses SaleRepository for all database queries (never direct model calls)
- * - All profit sharing percentages loaded from config/profit.php
- * - Reports include seller-wise breakdown and grand totals
+ * - Fixed profit split: 40% Salary, 60% Share (matches exportYearlySales method)
+ * - All formatting done in SalesReportExporter service
  *
  * Dependency Injection:
  * - Accepts SaleRepository via constructor
  * - Loaded via AppServiceProvider dependency bindings
  *
- * Configuration:
- * - config/profit.php: owner_share, seller_share (profit split percentages)
- *
  * Usage in Controllers:
  * $exporter = app(SalesReportExporter::class);
  * $csv = $exporter->generateCSV('2024-01-15');
  * $filePath = $exporter->exportToFile('2024-01-15');
+ * $summary = $exporter->generateSummary('2024-01-15');
  */
 class SalesReportExporter
 {
@@ -44,7 +50,7 @@ class SalesReportExporter
     {
         $this->saleRepository = $saleRepository;
     }
-    /** Generate CSV sales report for a specific date (uses repository, dynamic config) */
+    /** Generate CSV sales report for a specific date (matches yearly report format) */
     public function generateCSV(string $date = ''): string
     {
         if (empty($date)) {
@@ -54,68 +60,87 @@ class SalesReportExporter
         // Fetch sales for the given date using repository (not direct model call)
         $sales = $this->saleRepository->getByDate($date);
 
-        $csv = "Date,Seller Name,Item Name,Pick,Returned,Net Qty,Price,Total\n";
+        $csv = "Date,Seller Name,Item Name,Pick,Returned,Total,Sum,Salary (40%),Share (60%)\n";
 
         if ($sales->isEmpty()) {
             return $csv;
         }
 
-        // Group by seller for summary calculations
+        // Group by seller
         $groupedBySeller = $sales->groupBy('seller_id');
-
-        $grandTotal = 0;
-        $grandShare = 0;
-        $ownerSharePercentage = config('profit.owner_share');
+        $overallSum = 0;
 
         foreach ($groupedBySeller as $sellerId => $sellerSales) {
             $sellerName = $sellerSales->first()->seller->name ?? 'Unknown Seller';
             $sellerTotal = 0;
+            $itemRows = [];
 
-            // Add individual sale rows
+            // Calculate individual rows and seller total
             foreach ($sellerSales as $sale) {
-                $netQty = $sale->pick - ($sale->returned ?? 0);
-                $price = $sale->custom_price ?? $sale->item->price ?? 0;
-                $itemTotal = $netQty * $price;
-                $sellerTotal += $itemTotal;
+                $price = $sale->custom_price > 0 ? $sale->custom_price : ($sale->item->price ?? 0);
+                $rowTotal = ($sale->pick - ($sale->returned ?? 0)) * $price;
+                $sellerTotal += $rowTotal;
 
                 // Escape quotes in item name for CSV
                 $itemName = str_replace('"', '""', $sale->item->name ?? 'Unknown');
+                $itemNameWithPrice = "{$itemName} ({$price})";
 
-                $csv .= sprintf(
-                    '"%s","%s","%s",%d,%d,%d,%d,%d' . "\n",
-                    $date,
-                    $sellerName,
-                    $itemName,
-                    $sale->pick,
-                    $sale->returned ?? 0,
-                    $netQty,
-                    $price,
-                    $itemTotal
-                );
+                $itemRows[] = [
+                    'seller' => $sellerName,
+                    'item' => $itemNameWithPrice,
+                    'pick' => $sale->pick,
+                    'returned' => $sale->returned ?? 0,
+                    'total' => $rowTotal,
+                ];
             }
 
-            // Add seller summary rows
-            // Owner share calculation using config value (not hardcoded 0.6)
-            $ownerShare = (int)($sellerTotal * $ownerSharePercentage);
-            $sharePercentage = (int)($ownerSharePercentage * 100);
+            // Calculate seller percentages
+            $salary = (int)($sellerTotal * 0.4);
+            $share = (int)($sellerTotal * 0.6);
 
-            $csv .= sprintf('"%s","%s - TOTAL","","","","","","%d"' . "\n", $date, $sellerName, $sellerTotal);
-            $csv .= sprintf('"%s","%s - SHARE (%d%%)","","","","","","%d"' . "\n", $date, $sellerName, $sharePercentage, $ownerShare);
+            // Add individual item rows
+            foreach ($itemRows as $index => $row) {
+                if ($index === 0) {
+                    // First item row includes Sum, Salary, Share
+                    $csv .= sprintf(
+                        '"%s","%s","%s",%d,%d,%d,%d,%d,%d' . "\n",
+                        $date,
+                        $row['seller'],
+                        $row['item'],
+                        $row['pick'],
+                        $row['returned'],
+                        $row['total'],
+                        $sellerTotal,
+                        $salary,
+                        $share
+                    );
+                } else {
+                    // Subsequent rows keep seller name but leave Sum, Salary, Share blank
+                    $csv .= sprintf(
+                        '"%s","%s","%s",%d,%d,%d,,,'."\n",
+                        $date,
+                        $row['seller'],
+                        $row['item'],
+                        $row['pick'],
+                        $row['returned'],
+                        $row['total']
+                    );
+                }
+            }
 
-            $grandTotal += $sellerTotal;
-            $grandShare += $ownerShare;
+            $overallSum += $sellerTotal;
         }
 
-        // Add grand total rows
+        // Add grand total row
         $csv .= "\n";
-        $csv .= sprintf('"","GRAND TOTAL","","","","","","%d"' . "\n", $grandTotal);
-        $sharePercentage = (int)(config('profit.owner_share') * 100);
-        $csv .= sprintf('"","TOTAL SHARE (%d%%)","","","","","","%d"' . "\n", $sharePercentage, $grandShare);
+        $grandSalary = (int)($overallSum * 0.4);
+        $grandShare = (int)($overallSum * 0.6);
+        $csv .= sprintf('"%s","%s","Total",,,%d,%d,%d,%d' . "\n", $date, '', '', '', '', $overallSum, $grandSalary, $grandShare);
 
         return $csv;
     }
 
-    /** Generate text summary report for a specific date (uses repository, dynamic config) */
+    /** Generate text summary report for a specific date (matches yearly report format) */
     public function generateSummary(string $date = ''): string
     {
         if (empty($date)) {
@@ -135,40 +160,44 @@ class SalesReportExporter
             return $summary;
         }
 
-        // Group by seller for itemized breakdown
+        // Group by seller
         $groupedBySeller = $sales->groupBy('seller_id');
-        $grandTotal = 0;
-        $grandShare = 0;
-        $ownerSharePercentage = config('profit.owner_share');
-        $sharePercentageLabel = (int)($ownerSharePercentage * 100) . '%';
+        $overallSum = 0;
 
         foreach ($groupedBySeller as $sellerId => $sellerSales) {
             $sellerName = $sellerSales->first()->seller->name ?? 'Unknown Seller';
             $sellerTotal = 0;
             $itemCount = 0;
 
+            // Calculate seller total
             foreach ($sellerSales as $sale) {
-                $netQty = $sale->pick - ($sale->returned ?? 0);
-                $price = $sale->custom_price ?? $sale->item->price ?? 0;
-                $itemTotal = $netQty * $price;
-                $sellerTotal += $itemTotal;
+                $price = $sale->custom_price > 0 ? $sale->custom_price : ($sale->item->price ?? 0);
+                $rowTotal = ($sale->pick - ($sale->returned ?? 0)) * $price;
+                $sellerTotal += $rowTotal;
                 $itemCount++;
             }
 
-            // Calculate owner share using config value (not hardcoded 0.6)
-            $ownerShare = (int)($sellerTotal * $ownerSharePercentage);
+            // Calculate 40% salary, 60% share (matches yearly report)
+            $salary = (int)($sellerTotal * 0.4);
+            $share = (int)($sellerTotal * 0.6);
+
             $summary .= "👤 {$sellerName}\n";
             $summary .= "   Items: {$itemCount}\n";
-            $summary .= "   Total: ₹" . number_format($sellerTotal) . "\n";
-            $summary .= "   Share ({$sharePercentageLabel}): ₹" . number_format($ownerShare) . "\n\n";
+            $summary .= "   Total Sales: ₹" . number_format($sellerTotal) . "\n";
+            $summary .= "   Salary (40%): ₹" . number_format($salary) . "\n";
+            $summary .= "   Share (60%): ₹" . number_format($share) . "\n\n";
 
-            $grandTotal += $sellerTotal;
-            $grandShare += $ownerShare;
+            $overallSum += $sellerTotal;
         }
 
+        // Calculate grand totals
+        $grandSalary = (int)($overallSum * 0.4);
+        $grandShare = (int)($overallSum * 0.6);
+
         $summary .= "═══════════════════════════════════════════\n";
-        $summary .= "Total Sales: ₹" . number_format($grandTotal) . "\n";
-        $summary .= "Total Share ({$sharePercentageLabel}): ₹" . number_format($grandShare) . "\n";
+        $summary .= "Total Sales: ₹" . number_format($overallSum) . "\n";
+        $summary .= "Total Salary (40%): ₹" . number_format($grandSalary) . "\n";
+        $summary .= "Total Share (60%): ₹" . number_format($grandShare) . "\n";
         $summary .= "═══════════════════════════════════════════\n";
 
         return $summary;
