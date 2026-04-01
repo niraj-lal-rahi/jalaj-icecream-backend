@@ -13,7 +13,14 @@ class SendSalesReportCommand extends Command
 {
     /**
      * The name and signature of the console command.
+     * # Use current date
+     * php artisan send:sales-report --via=email
      *
+     * # Use specific date
+     * php artisan send:sales-report --date=2024-01-15 --via=email
+     *
+     * # Both WhatsApp and Email with specific date
+     * php artisan send:sales-report --date=2024-01-15
      * @var string
      */
     protected $signature = 'send:sales-report {--date= : Date for report (YYYY-MM-DD, default: today)} {--via=both : Send via whatsapp, email, or both (default: both)}';
