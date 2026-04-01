@@ -19,11 +19,14 @@ class SendSalesReportCommand extends Command
      * # Use specific date
      * php artisan send:sales-report --date=2024-01-15 --via=email
      *
+     * # Send to custom email
+     * php artisan send:sales-report --via=email --email=user@example.com
+     *
      * # Both WhatsApp and Email with specific date
      * php artisan send:sales-report --date=2024-01-15
      * @var string
      */
-    protected $signature = 'send:sales-report {--date= : Date for report (YYYY-MM-DD, default: today)} {--via=both : Send via whatsapp, email, or both (default: both)}';
+    protected $signature = 'send:sales-report {--date= : Date for report (YYYY-MM-DD, default: today)} {--via=both : Send via whatsapp, email, or both (default: both)} {--email= : Email address to send to (default: admin email)}';
 
     /**
      * The description of the console command.
@@ -78,7 +81,7 @@ class SendSalesReportCommand extends Command
             // Send via Email if requested
             if (in_array($via, ['email', 'both'])) {
                 $this->info("Sending via Email...");
-                $adminEmail = config('mail.from.address') ?? config('app.email_admin');
+                $adminEmail = $this->option('email') ?? config('mail.from.address') ?? config('app.email_admin');
                 $subject = "📊 Sales Report for {$date}";
 
                 $emailSent = $emailService->sendSalesReport(
