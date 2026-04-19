@@ -38,6 +38,12 @@
                     </a>
                 </li>
                 <li class="nav-item mb-2">
+                    <a href="{{ route('admin.attendance.index') }}"
+                        class="nav-link text-white {{ request()->routeIs('admin.attendance.*') ? 'active bg-primary rounded' : '' }}">
+                        Attendance Management
+                    </a>
+                </li>
+                <li class="nav-item mb-2">
                     <a href="{{ route('admin.items.index') }}"
                         class="nav-link text-white {{ request()->routeIs('admin.items.*') ? 'active bg-primary rounded' : '' }}">
                         Item Management

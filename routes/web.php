@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\LogViewerController;
 use App\Http\Controllers\Admin\RedFlagController;
 use App\Http\Controllers\Admin\EntryDayController;
 use App\Http\Controllers\Admin\SellerPerformanceController;
+use App\Http\Controllers\Admin\AttendanceController;
 use App\Http\Controllers\Admin\DatabaseDumpController;
 use App\Http\Controllers\Admin\ItemController;
 use App\Http\Controllers\Admin\SaleController;
@@ -43,6 +44,9 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
 
     Route::get('/seller-performance', [SellerPerformanceController::class, 'index'])
         ->name('seller-performance.index');
+
+    Route::get('/attendance', [AttendanceController::class, 'index'])
+        ->name('attendance.index');
 
     // Database Dumps
     Route::get('database-dumps', [DatabaseDumpController::class, 'index'])
