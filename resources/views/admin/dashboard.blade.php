@@ -1,7 +1,20 @@
 @extends('admin.layouts.app')
 
 @section('content')
-    <h3>Dashboard</h3>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3>Dashboard</h3>
+        
+        <!-- Date Filter Form -->
+        <form method="GET" action="{{ route('admin.dashboard') }}" class="d-flex align-items-center gap-2">
+            <input type="date" name="start_date" class="form-control form-control-sm" value="{{ $startDate ?? '' }}" aria-label="Start Date">
+            <span>to</span>
+            <input type="date" name="end_date" class="form-control form-control-sm" value="{{ $endDate ?? '' }}" aria-label="End Date">
+            <button type="submit" class="btn btn-sm btn-primary">Filter</button>
+            @if(isset($isFiltered) && $isFiltered)
+                <a href="{{ route('admin.dashboard') }}" class="btn btn-sm btn-secondary">Clear</a>
+            @endif
+        </form>
+    </div>
 
     @if ($errors->any())
         <div class="alert alert-danger mt-3">
@@ -37,11 +50,11 @@
             </div>
         </div>
 
-        <!-- Monthly Total -->
+        <!-- Monthly/Filtered Total -->
         <div class="col-md-6 col-lg-3">
-            <div class="card shadow-sm border-0 bg-success text-white">
+            <div class="card shadow-sm border-0 {{ (isset($isFiltered) && $isFiltered) ? 'bg-primary' : 'bg-success' }} text-white">
                 <div class="card-body">
-                    <h6>Monthly Total</h6>
+                    <h6>{{ (isset($isFiltered) && $isFiltered) ? 'Filtered Total' : 'Monthly Total' }}</h6>
                     <h3>₹ {{ number_format($monthlyTotal) }}</h3>
                     <small>Owner (60%): ₹ {{ number_format($monthlyOwnerShare) }}</small>
                     <br>
@@ -186,4 +199,38 @@
             </div>
         </div>
     </div>
+
+    <!-- Analytics Charts Section -->
+    <h4 class="mt-5 mb-4">📊 Sales Analytics</h4>
+    
+    <!-- Monthly Sales Trend -->
+    <div class="row mb-4">
+        <div class="col-12">
+            @include('admin.components.sales-trend-chart')
+        </div>
+    </div>
+
+    <!-- Top Sellers & Best Sellers Row -->
+    <div class="row mb-4">
+        <div class="col-lg-6 mb-4">
+            @include('admin.components.top-sellers-chart')
+        </div>
+        <div class="col-lg-6 mb-4">
+            @include('admin.components.avg-sellers-chart')
+        </div>
+    </div>
+
+    <!-- Item Popularity & Day of Week -->
+    <div class="row mb-4">
+        <div class="col-lg-6 mb-4 mb-lg-0">
+            @include('admin.components.items-chart')
+        </div>
+        <div class="col-lg-6">
+            @include('admin.components.day-of-week-chart')
+        </div>
+    </div>
+
+    @push('scripts')
+        @vite('resources/js/admin/charts.js')
+    @endpush
 @endsection

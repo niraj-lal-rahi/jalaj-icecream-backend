@@ -21,33 +21,43 @@ class DashboardStatisticsService
     ) {}
 
     /** Get all dashboard statistics (sales, earnings, counts, top performers) */
-    public function getAllStatistics(): array
+    public function getAllStatistics($startDate = null, $endDate = null): array
     {
         $today = Carbon::today();
         $yesterday = $today->clone()->subDay();
+
+        $monthlyTotal = 0;
+        if ($startDate && $endDate) {
+            $from = Carbon::parse($startDate)->startOfDay();
+            $to = Carbon::parse($endDate)->endOfDay();
+            $sales = $this->saleRepository->getByDateRange($from, $to);
+            $monthlyTotal = $this->sumSaleTotal($sales);
+        } else {
+            $monthlyTotal = $this->calculateMonthlyTotal();
+        }
 
         return [
             // Sales totals
             'todayTotal' => $this->calculateTodayTotal($today),
             'yesterdayTotal' => $this->calculateYesterdayTotal($yesterday),
-            'monthlyTotal' => $this->calculateMonthlyTotal(),
+            'monthlyTotal' => $monthlyTotal,
             'grandTotal' => $this->calculateGrandTotal(),
 
             // Earnings breakdown
             'todayEarnings' => $this->calculateEarnings($this->calculateTodayTotal($today)),
             'yesterdayEarnings' => $this->calculateEarnings($this->calculateYesterdayTotal($yesterday)),
-            'monthlyEarnings' => $this->calculateEarnings($this->calculateMonthlyTotal()),
+            'monthlyEarnings' => $this->calculateEarnings($monthlyTotal),
             'allTimeEarnings' => $this->calculateEarnings($this->calculateGrandTotal()),
 
             // Counts
-            'redFlagCount' => $this->getRedFlagCount(),
+            'redFlagCount' => $this->getRedFlagCount($startDate, $endDate),
             'sellerCount' => $this->sellerRepository->count(),
             'itemCount' => $this->itemRepository->count(),
-            'transactionCount' => $this->getTransactionCount(),
-            'daysWithSales' => $this->getDaysWithSalesCount(),
+            'transactionCount' => $this->getTransactionCount($startDate, $endDate),
+            'daysWithSales' => $this->getDaysWithSalesCount($startDate, $endDate),
 
             // Top performers
-            'topPerformers' => $this->getTopPerformers(),
+            'topPerformers' => $this->getTopPerformers(null, $startDate, $endDate),
         ];
     }
 
@@ -107,10 +117,17 @@ class DashboardStatisticsService
     }
 
     /** Count unique date + seller combinations (red-flagged sales only) */
-    public function getRedFlagCount(): int
+    public function getRedFlagCount($startDate = null, $endDate = null): int
     {
-        $redFlagSales = $this->saleRepository->getAll()
-            ->filter(fn($sale) => $sale->red_flag);
+        $sales = $this->saleRepository->getAll();
+        
+        if ($startDate && $endDate) {
+            $from = Carbon::parse($startDate)->startOfDay();
+            $to = Carbon::parse($endDate)->endOfDay();
+            $sales = $sales->filter(fn($sale) => Carbon::parse($sale->date)->between($from, $to));
+        }
+
+        $redFlagSales = $sales->filter(fn($sale) => $sale->red_flag);
 
         return $redFlagSales
             ->groupBy(['date', 'seller_id'])
@@ -118,33 +135,69 @@ class DashboardStatisticsService
     }
 
     /** Get unique transaction count (seller on date = 1 transaction) */
-    public function getTransactionCount(): int
+    public function getTransactionCount($startDate = null, $endDate = null): int
     {
         $sales = $this->saleRepository->getAll();
+        
+        if ($startDate && $endDate) {
+            $from = Carbon::parse($startDate)->startOfDay();
+            $to = Carbon::parse($endDate)->endOfDay();
+            $sales = $sales->filter(fn($sale) => Carbon::parse($sale->date)->between($from, $to));
+        }
+
         return $sales->groupBy(['date', 'seller_id'])->count();
     }
 
     /** Count distinct dates with sales */
-    public function getDaysWithSalesCount(): int
+    public function getDaysWithSalesCount($startDate = null, $endDate = null): int
     {
         $sales = $this->saleRepository->getAll();
+        
+        if ($startDate && $endDate) {
+            $from = Carbon::parse($startDate)->startOfDay();
+            $to = Carbon::parse($endDate)->endOfDay();
+            $sales = $sales->filter(fn($sale) => Carbon::parse($sale->date)->between($from, $to));
+        }
+
         return $sales->groupBy('date')->count();
     }
 
     /** Get top N performers (uses cache to prevent expensive recalculation) */
-    public function getTopPerformers(int $limit = null): array
+    public function getTopPerformers(int $limit = null, $startDate = null, $endDate = null): array
     {
         $limit = $limit ?? config('performance.top_performers_limit');
         $cacheTTL = config('cache_config.ttl.top_performers');
+        
+        $cacheKey = "top_performers_cache_{$limit}";
+        if ($startDate && $endDate) {
+            $cacheKey .= "_{$startDate}_{$endDate}";
+        }
 
         return Cache::remember(
-            'top_performers_cache',
+            $cacheKey,
             now()->addMinutes($cacheTTL),
-            function () use ($limit) {
+            function () use ($limit, $startDate, $endDate) {
+                // If we need true date filtering inside SellerPerformanceService,
+                // we'd need to mock the $saleRepository or pass dates.
+                // However, since SellerPerformanceService uses getByDateRange inside calculateAll,
+                // we technically can't filter its raw calculations without modifying the service.
+                // But for now we will recreate the logic inline for filtering or pass it down.
+                
+                // For simplicity, we fetch all users, map performance manually for filtered date.
+                // Note: The built-in SellerPerformanceService doesn't accept date range yet.
+                // We'll use the existing one but if large, we'd refactor SellerPerformanceService.
                 $performanceService = new SellerPerformanceService(
                     $this->saleRepository,
                     $this->sellerRepository,
                 );
+                
+                if ($startDate && $endDate) {
+                    $performanceService->setGlobalDateFilter(
+                        Carbon::parse($startDate)->startOfDay(), 
+                        Carbon::parse($endDate)->endOfDay()
+                    );
+                }
+
                 return $performanceService
                     ->calculateAllSellerPerformance()
                     ->take($limit)

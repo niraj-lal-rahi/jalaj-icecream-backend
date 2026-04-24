@@ -12,6 +12,7 @@ class DashboardController extends Controller
 {
     /** Display admin dashboard with statistics and top performers (uses service + repositories) */
     public function index(
+        \Illuminate\Http\Request $request,
         SaleRepository $saleRepository,
         SellerRepository $sellerRepository,
         ItemRepository $itemRepository,
@@ -24,9 +25,15 @@ class DashboardController extends Controller
                 $itemRepository,
             );
 
-            $stats = $statisticsService->getAllStatistics();
+            $startDate = $request->query('start_date');
+            $endDate = $request->query('end_date');
+
+            $stats = $statisticsService->getAllStatistics($startDate, $endDate);
 
             return view('admin.dashboard', [
+                'startDate' => $startDate,
+                'endDate' => $endDate,
+                'isFiltered' => ($startDate && $endDate),
                 'todayTotal' => $stats['todayTotal'],
                 'todayOwnerShare' => $stats['todayEarnings']['ownerShare'],
                 'todaySellerShare' => $stats['todayEarnings']['sellerShare'],

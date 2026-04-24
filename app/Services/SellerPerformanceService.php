@@ -7,6 +7,7 @@ use App\Models\Seller;
 use App\Repositories\Contracts\SaleRepository;
 use App\Repositories\Contracts\SellerRepository;
 use Illuminate\Support\Collection;
+use Carbon\Carbon;
 
 /**
  * SINGLE SOURCE OF TRUTH for seller performance calculations.
@@ -14,6 +15,9 @@ use Illuminate\Support\Collection;
  */
 class SellerPerformanceService
 {
+    private ?Carbon $filterStart = null;
+    private ?Carbon $filterEnd = null;
+
     /** SaleRepository for all sale queries (never use Sale::query() directly) */
     private SaleRepository $saleRepository;
 
@@ -29,12 +33,22 @@ class SellerPerformanceService
         $this->sellerRepository = $sellerRepository;
     }
 
+    public function setGlobalDateFilter(Carbon $start, Carbon $end)
+    {
+        $this->filterStart = $start;
+        $this->filterEnd = $end;
+    }
+
     /** Calculate performance metrics for all sellers (uses repositories, prevents N+1) */
     public function calculateAllSellerPerformance(): Collection
     {
         // Get all sellers and sales from repositories (not models)
         $sellers = $this->sellerRepository->getAll();
         $allSales = $this->saleRepository->getAll();
+
+        if ($this->filterStart && $this->filterEnd) {
+            $allSales = $allSales->filter(fn($sale) => Carbon::parse($sale->date)->between($this->filterStart, $this->filterEnd));
+        }
 
         // Get all unique dates in the system
         $allDates = $allSales->pluck('date')->unique()->sort()->values()->toArray();
