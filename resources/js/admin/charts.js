@@ -400,7 +400,7 @@ async function initAvgSellersChart() {
                 labels: data.labels,
                 datasets: [
                     {
-                        label: 'Avg Sale (₹)',
+                        label: 'Performance Score (%)',
                         data: data.data,
                         backgroundColor: [
                             chartColors.green,
@@ -440,9 +440,9 @@ async function initAvgSellersChart() {
                             label: function (context) {
                                 const seller = data.sellers[context.dataIndex];
                                 return [
-                                    'Avg Sale: ₹ ' + formatNumber(context.parsed.x),
+                                    'Score: ' + Number(context.parsed.x).toFixed(1) + '%',
                                     'Total Sales: ₹ ' + formatNumber(seller.total_sales),
-                                    'Transactions: ' + seller.transactions,
+                                    'Active Days: ' + seller.transactions,
                                 ];
                             },
                         },

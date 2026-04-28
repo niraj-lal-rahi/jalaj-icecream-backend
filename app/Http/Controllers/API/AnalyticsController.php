@@ -48,17 +48,34 @@ class AnalyticsController extends Controller
     }
 
     /**
-     * Get top sellers by average sale amount
+     * Get top performers based on performance score
      */
-    public function getTopSellersByAvgSale()
+    public function getTopSellersByAvgSale(\App\Services\SellerPerformanceService $performanceService)
     {
         try {
             $startDate = request('start_date');
             $endDate = request('end_date');
-            $data = $this->analyticsService->getTopSellersByAvgSale(10, 3, $startDate, $endDate);
-            return $this->success($data, 'Top sellers by average sale retrieved successfully');
+            
+            if ($startDate && $endDate) {
+                $performanceService->setGlobalDateFilter(\Carbon\Carbon::parse($startDate)->startOfDay(), \Carbon\Carbon::parse($endDate)->endOfDay());
+            }
+            
+            $performers = $performanceService->getTopPerformers(10);
+            
+            $data = [
+                'labels' => $performers->pluck('name')->toArray(),
+                'data' => $performers->pluck('performanceScore')->toArray(),
+                'sellers' => $performers->map(function ($p) {
+                    return [
+                        'total_sales' => $p['totalSalesAmount'],
+                        'transactions' => $p['daysWithSales'],
+                    ];
+                })->toArray(),
+            ];
+            
+            return $this->success($data, 'Top performers retrieved successfully');
         } catch (\Exception $e) {
-            return $this->error('Failed to retrieve top sellers by avg sale', 500, $e->getMessage());
+            return $this->error('Failed to retrieve top performers', 500, $e->getMessage());
         }
     }
 
